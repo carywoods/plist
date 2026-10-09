@@ -1,0 +1,6 @@
+{
+  "name": "Sumitup",
+  "priority": "P2",
+  "reason": "Working web prototype; MVP goal is 1,000 users; web-first launch with email authentication and later social challenge features; build can be largely delegated in-house.",
+  "last_updated": "2026-10-09"
+}
