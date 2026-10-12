@@ -1,0 +1,444 @@
+{
+  "generated_on": "2026-10-12",
+  "source": "idea_census_project_registry_ic_numbers_recovered.csv",
+  "method": "Best-effort migration using current organizational context plus legacy status. Priority remains an independent overlay.",
+  "safety_note": "Personal health, estate/admin, daily ritual, and raw domain-inventory records are intentionally excluded from public lifecycle folders.",
+  "live": [
+    [
+      "IC-000004",
+      "CommPilot (email AI assistant)"
+    ],
+    [
+      "IC-000005",
+      "HarnessAI (parent product line)"
+    ],
+    [
+      "IC-000008",
+      "Xylogenics (yeast genomics company)"
+    ],
+    [
+      "IC-000013",
+      "Local inference stack (Ollama/etc.)"
+    ],
+    [
+      "IC-000019",
+      "Just Bash workflow"
+    ],
+    [
+      "IC-000021",
+      "Breaking Barriers blog (6+ years daily)"
+    ],
+    [
+      "IC-000022",
+      "LinkedIn presence (articles + posts)"
+    ],
+    [
+      "IC-000023",
+      "Envoi Publishing imprint"
+    ],
+    [
+      "IC-000024",
+      "Substack newsletter"
+    ],
+    [
+      "IC-000034",
+      "ResearchGate preprints"
+    ],
+    [
+      "IC-000063",
+      "Woods Foundation general operations"
+    ],
+    [
+      "IC-000069",
+      "Container / deployment stack"
+    ],
+    [
+      "IC-000070",
+      "Homelab Proxmox cluster"
+    ],
+    [
+      "IC-000071",
+      "Database stack"
+    ],
+    [
+      "IC-000072",
+      "OVH VPS production fleet"
+    ],
+    [
+      "IC-000073",
+      "Tailscale mesh"
+    ],
+    [
+      "IC-000076",
+      "Personal site (hcwoods.com)"
+    ],
+    [
+      "IC-000077",
+      "SoundsForScience.com"
+    ],
+    [
+      "IC-000079",
+      "OnRamp"
+    ],
+    [
+      "IC-000092",
+      "Street Kings music production"
+    ]
+  ],
+  "active": [
+    [
+      "IC-000001",
+      "Rfour migraine therapeutic patent track"
+    ],
+    [
+      "IC-000002",
+      "Breach Trend Analysis (BTA) system"
+    ],
+    [
+      "IC-000009",
+      "GoFlow (mass spec platform)"
+    ],
+    [
+      "IC-000010",
+      "Bioscope SAB review"
+    ],
+    [
+      "IC-000016",
+      "MCP server work"
+    ],
+    [
+      "IC-000017",
+      "OpenClaw / Nanoclaw (recent build)"
+    ],
+    [
+      "IC-000020",
+      "Enterprise Roster agent protocol"
+    ],
+    [
+      "IC-000035",
+      "Patent / IP portfolio"
+    ],
+    [
+      "IC-000037",
+      "Options strategy (covered calls)"
+    ],
+    [
+      "IC-000038",
+      "Portfolio management / retirement accounts"
+    ],
+    [
+      "IC-000039",
+      "Active ticker watchlist"
+    ],
+    [
+      "IC-000040",
+      "Daily trading workflow / morning strategy"
+    ],
+    [
+      "IC-000053",
+      "Energy / tariffs / macro policy"
+    ],
+    [
+      "IC-000054",
+      "Open access / HBCU policy thread"
+    ],
+    [
+      "IC-000055",
+      "Election integrity / gerrymandering work"
+    ],
+    [
+      "IC-000064",
+      "Rooted Together"
+    ]
+  ],
+  "planning": [
+    [
+      "IC-000027",
+      "A Soulful Christmas Carol"
+    ],
+    [
+      "IC-000082",
+      "ItsMadeByHand"
+    ],
+    [
+      "IC-000090",
+      "Sumitup"
+    ]
+  ],
+  "planned": [
+    [
+      "IC-000003",
+      "The Machinery of Democracy (book + site)"
+    ],
+    [
+      "IC-000006",
+      "Algorithmic Bias / NLP bias paper (ABO)"
+    ],
+    [
+      "IC-000011",
+      "SBIR grant strategy"
+    ],
+    [
+      "IC-000014",
+      "CommandOS (multi-tenant orchestration)"
+    ],
+    [
+      "IC-000025",
+      "What Still Works in America (anthology)"
+    ],
+    [
+      "IC-000026",
+      "Ethics book manuscript"
+    ],
+    [
+      "IC-000028",
+      "Soulful Universe fiction world"
+    ],
+    [
+      "IC-000029",
+      "Stability vs. Growth economic whitepaper"
+    ],
+    [
+      "IC-000030",
+      "MSD Pike Township assessment system"
+    ],
+    [
+      "IC-000031",
+      "HBCU yeast biology network"
+    ],
+    [
+      "IC-000032",
+      "IndyBioSystems"
+    ],
+    [
+      "IC-000033",
+      "Proteomics / AI drug discovery thread"
+    ],
+    [
+      "IC-000036",
+      "Pharmaceutical research thread (caffeine/aspirin/CBD)"
+    ],
+    [
+      "IC-000041",
+      "Banker Doug Pipeline / Freedom First"
+    ],
+    [
+      "IC-000042",
+      "PSN / Quantum Analysis Pipeline"
+    ],
+    [
+      "IC-000044",
+      "Email helpdesk product"
+    ],
+    [
+      "IC-000047",
+      "Voice models (Brooks/Reich/Deford)"
+    ],
+    [
+      "IC-000048",
+      "Balance by Design"
+    ],
+    [
+      "IC-000049",
+      "Pathways to Power"
+    ],
+    [
+      "IC-000050",
+      "Home the Right Way revival"
+    ],
+    [
+      "IC-000056",
+      "Healthcare policy thread"
+    ],
+    [
+      "IC-000058",
+      "Path2Learn / EdTech idea"
+    ],
+    [
+      "IC-000065",
+      "YourNextGoodDay"
+    ],
+    [
+      "IC-000066",
+      "GrantMatch (foundation grant tool)"
+    ],
+    [
+      "IC-000067",
+      "Adaptive Hire Framework"
+    ],
+    [
+      "IC-000074",
+      "Hostsbusiness.com property"
+    ],
+    [
+      "IC-000075",
+      "Movies We Missed"
+    ],
+    [
+      "IC-000080",
+      "Zionsville.biz local directory"
+    ],
+    [
+      "IC-000081",
+      "YouWannaPizza"
+    ],
+    [
+      "IC-000083",
+      "OpenWheelWeekly.com"
+    ],
+    [
+      "IC-000084",
+      "TheComputerScholar.com"
+    ]
+  ],
+  "concept": [
+    [
+      "IC-000007",
+      "Maternal morbidity research"
+    ],
+    [
+      "IC-000012",
+      "Workroom (multi-agent loop)"
+    ],
+    [
+      "IC-000015",
+      "AnythingLLM workspace (white-labeled)"
+    ],
+    [
+      "IC-000018",
+      "Ralph Wiggum stateless agent pattern"
+    ],
+    [
+      "IC-000043",
+      "ProtoPharm AI"
+    ],
+    [
+      "IC-000045",
+      "The Mirror MVP"
+    ],
+    [
+      "IC-000046",
+      "AI Insurance Toolkit"
+    ],
+    [
+      "IC-000051",
+      "A Survival Guide for Entrepreneurial Parents"
+    ],
+    [
+      "IC-000052",
+      "The Bachelor Dude"
+    ],
+    [
+      "IC-000057",
+      "Autonomous ride-sharing policy"
+    ],
+    [
+      "IC-000059",
+      "Personal Curriculum project"
+    ],
+    [
+      "IC-000060",
+      "Mini Med School self-education track"
+    ],
+    [
+      "IC-000061",
+      "GAIB course (Marian University)"
+    ],
+    [
+      "IC-000062",
+      "Garden Planning App (course product)"
+    ],
+    [
+      "IC-000068",
+      "PhilanThrive philanthropic venture"
+    ],
+    [
+      "IC-000078",
+      "Nano Banana faceless video engine"
+    ],
+    [
+      "IC-000085",
+      "ScanGuard QR"
+    ],
+    [
+      "IC-000086",
+      "SimplShield"
+    ],
+    [
+      "IC-000087",
+      "EcoLexis"
+    ],
+    [
+      "IC-000088",
+      "QR Business Card"
+    ],
+    [
+      "IC-000089",
+      "Magnifying Glass vision assistance app"
+    ],
+    [
+      "IC-000091",
+      "webmic"
+    ],
+    [
+      "IC-000093",
+      "Give Candy to Strangers (band)"
+    ]
+  ],
+  "priority_overlay": [
+    [
+      "IC-000001",
+      "Rfour migraine therapeutic patent track",
+      "priority"
+    ],
+    [
+      "IC-000002",
+      "Breach Trend Analysis (BTA) system",
+      "priority"
+    ],
+    [
+      "IC-000027",
+      "A Soulful Christmas Carol",
+      "priority"
+    ],
+    [
+      "IC-000090",
+      "Sumitup",
+      "P2"
+    ],
+    [
+      "NEW",
+      "#2 Vol. 1",
+      "P1"
+    ]
+  ],
+  "excluded_from_public_lifecycle": [
+    [
+      "IC-000094",
+      "Estate / survivor benefits coordination",
+      "personal/private"
+    ],
+    [
+      "IC-000095",
+      "Personal health context",
+      "sensitive/private"
+    ],
+    [
+      "IC-000096",
+      "Morning Brief ritual (NOT a project)",
+      "ritual, not project"
+    ],
+    [
+      "IC-000099–IC-000132",
+      "Domain / Web Property Portfolio",
+      "inventory records; should be handled separately from project lifecycle"
+    ]
+  ],
+  "needs_review": [
+    "Street Kings music production may overlap with #2 Vol. 1 and should be reconciled.",
+    "Nano Banana faceless video engine may have been superseded by OpenMontage.",
+    "Movies We Missed appears parked operationally even though the legacy CSV says Active.",
+    "Several policy/research threads are recurring publishing inputs rather than standalone projects.",
+    "Domain records should become a separate inventory if we want to code against ownership/renewal state."
+  ]
+}
