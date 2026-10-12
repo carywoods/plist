@@ -1,0 +1,9 @@
+{
+  "id": "IC-000065",
+  "name": "YourNextGoodDay",
+  "status": "planned",
+  "priority": null,
+  "source": "idea_census_project_registry_ic_numbers_recovered.csv",
+  "migrated_on": "2026-10-12",
+  "last_updated": "2026-10-12"
+}
