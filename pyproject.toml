@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plist-ops"
+version = "0.1.0"
+description = "Small operational control system with a Git-readable mirror"
+requires-python = ">=3.11"
+dependencies = [
+  "Flask>=3.0,<4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["opsapp*"]
+
+[tool.setuptools.package-data]
+opsapp = ["schema.sql", "templates/*.html", "static/*.css"]
+

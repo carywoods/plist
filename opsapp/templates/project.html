@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<div class="page-title"><div><p class="eyebrow">{{ project.id }} · {{ project.status }}</p><h1>{{ project.name }}</h1></div><p>{{ project.description }}</p></div>
+<dl class="facts"><div><dt>Owner</dt><dd>{{ project.owner or 'Missing' }}</dd></div><div><dt>Priority</dt><dd>{{ project.priority or 'Unset' }}</dd></div><div><dt>Version</dt><dd>{{ project.version }}</dd></div><div><dt>Last activity</dt><dd>{{ project.last_activity or project.updated_at }}</dd></div></dl>
+<section class="definition"><h2>Definition of completion</h2><p>{{ project.completion_definition or 'Missing — this active project is at risk.' }}</p></section>
+<details class="create"><summary>Cary: update project state</summary>
+  <form method="post" action="{{ url_for('ops.update_project_ui', object_id=project.id) }}" class="form-grid">
+    <input type="hidden" name="version" value="{{ project.version }}"><input type="hidden" name="actor" value="Cary">
+    <label>Owner<select name="owner"><option {% if project.owner == 'Cary' %}selected{% endif %}>Cary</option><option {% if project.owner == 'Dax-A' %}selected{% endif %}>Dax-A</option></select></label>
+    <label>Status<select name="status">{% for status in ['active','incubating','parked','blocked','completed','archived'] %}<option {% if project.status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>
+    <label>Manual priority<input name="priority" type="number" min="1" max="5" value="{{ project.priority or '' }}"></label>
+    <label class="wide">Definition of completion<textarea name="completion_definition">{{ project.completion_definition }}</textarea></label><button>Update project</button>
+  </form>
+</details>
+<div class="two-column">
+  <section class="panel"><h2>Deliverables <span>{{ deliverables|length }}</span></h2><ul>{% for item in deliverables %}<li><div><strong>{{ item.title }}</strong><small>{{ item.definition_of_done }}</small></div><span class="badge {{ item.status }}">{{ item.status }}</span></li>{% else %}<li class="empty">No deliverables.</li>{% endfor %}</ul></section>
+  <section class="panel"><h2>Tasks <span>{{ tasks|length }}</span></h2><ul>{% for item in tasks %}<li><div><strong>{{ item.title }}</strong><small>{{ item.owner }} · {{ item.blocker_reason or item.description }}</small></div><span class="badge {{ item.status }}">{{ item.status }}</span></li>{% else %}<li class="empty">No tasks.</li>{% endfor %}</ul></section>
+</div>
+<details class="create"><summary>Create a deliverable</summary>
+  <form method="post" action="{{ url_for('ops.create_deliverable_ui') }}" class="form-grid">
+    <input type="hidden" name="project_id" value="{{ project.id }}"><input type="hidden" name="actor" value="Dax-A">
+    <label>Title<input name="title" required></label><label>Owner<select name="owner"><option>Dax-A</option><option>Cary</option></select></label><label>Status<select name="status"><option>planned</option><option>active</option></select></label>
+    <label class="wide">Definition of done<textarea name="definition_of_done" required></textarea></label><button>Create deliverable</button>
+  </form>
+</details>
+{% if decisions %}<section class="panel"><h2>Decisions</h2><ul>{% for item in decisions %}<li><div><strong>{{ item.title }}</strong><small>{{ item.context }}</small></div><span class="badge {{ item.status }}">{{ item.status }}</span></li>{% endfor %}</ul></section>{% endif %}
+{% endblock %}

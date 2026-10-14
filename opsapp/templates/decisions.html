@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Decisions{% endblock %}
+{% block content %}
+<div class="page-title"><div><p class="eyebrow">Judgment</p><h1>Decision queue</h1></div><p>Requests for Cary’s authority, separated from executable work.</p></div>
+<details class="create"><summary>Request a decision</summary><form method="post" action="{{ url_for('ops.create_decision_ui') }}" class="form-grid">
+  <label>Project<select name="project_id"><option value="">Organization-wide</option>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label><label>Title<input name="title" required></label>
+  <label class="wide">Context<textarea name="context" required></textarea></label><label class="wide">Recommendation<textarea name="recommendation"></textarea></label><input type="hidden" name="actor" value="Dax-A"><button>Request decision</button>
+</form></details>
+{% for item in decisions %}<article class="decision"><div><span class="badge {{ item.status }}">{{ item.status }}</span><small>{{ item.id }} · requested by {{ item.requested_by }} · v{{ item.version }}</small></div><h2>{{ item.title }}</h2><p>{{ item.context }}</p>{% if item.recommendation %}<p><strong>Recommendation:</strong> {{ item.recommendation }}</p>{% endif %}
+{% if item.status == 'pending' %}<form method="post" action="{{ url_for('ops.decide_ui', object_id=item.id) }}" class="decision-form"><input type="hidden" name="version" value="{{ item.version }}"><input type="hidden" name="actor" value="Cary"><input name="decision" placeholder="Cary’s decision" required><button>Record decision</button></form>{% else %}<p><strong>Decision:</strong> {{ item.decision }}</p>{% endif %}</article>{% endfor %}
+{% endblock %}

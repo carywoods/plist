@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Activity{% endblock %}
+{% block content %}
+<div class="page-title"><div><p class="eyebrow">Append-only audit</p><h1>Activity</h1></div><p>Meaningful state changes, actor, and time.</p></div>
+{% if failures %}<section class="sync-alert"><h2>Repository synchronization needs attention</h2>{% for item in failures %}<p><strong>{{ item.object_id }}</strong> · {{ item.error }}</p>{% endfor %}<p>After correcting the cause, Cary can POST to <code>/api/admin/sync</code>.</p></section>{% endif %}
+<div class="timeline">{% for item in activity %}<article><time>{{ item.occurred_at }}</time><div><strong>{{ item.summary }}</strong><small>{{ item.object_type }} {{ item.object_id }} · {{ item.action }}</small></div></article>{% else %}<p>No activity.</p>{% endfor %}</div>
+{% endblock %}

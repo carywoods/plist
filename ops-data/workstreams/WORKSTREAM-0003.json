@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-10-12T18:26:19Z",
+  "created_by": "legacy-import",
+  "description": "Projects imported from the original lifecycle registry pending operational triage",
+  "id": "WORKSTREAM-0003",
+  "name": "Legacy Portfolio",
+  "owner": "Cary",
+  "status": "active",
+  "updated_at": "2026-10-12T18:26:19Z",
+  "updated_by": "legacy-import",
+  "version": 1
+}

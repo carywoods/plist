@@ -1,0 +1,21 @@
+{
+  "completion_definition": "Production validation is accepted and rollout decision recorded",
+  "created_at": "2026-10-12T17:08:59Z",
+  "created_by": "Cary",
+  "description": "Email assistant production validation",
+  "effort": 3,
+  "id": "PROJECT-0001",
+  "impact": 5,
+  "last_activity": "2026-10-12T17:08:59Z",
+  "last_reviewed": "2026-10-12T17:08:59Z",
+  "legacy_source": "live/ic-000004-commpilot-email-ai-assistant.json",
+  "name": "CommPilot",
+  "owner": "Cary",
+  "priority": 1,
+  "status": "active",
+  "updated_at": "2026-10-12T18:26:19Z",
+  "updated_by": "legacy-import",
+  "urgency": 5,
+  "version": 2,
+  "workstream_id": "WORKSTREAM-0001"
+}

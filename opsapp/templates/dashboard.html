@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}What’s next?{% endblock %}
+{% macro task_row(task) %}
+<li>
+  <div><a href="{{ url_for('ops.project_page', object_id=task.project_id) }}"><strong>{{ task.title }}</strong></a><small>{{ task.project_name }} · {{ task.owner or 'Unowned' }}</small></div>
+  <span class="badge {{ task.status }}">{{ task.status|replace('_',' ') }}</span>
+</li>
+{% endmacro %}
+{% block content %}
+<section class="hero">
+  <div><p class="eyebrow">Operational control</p><h1>What should we work on next?</h1></div>
+  {% if board.next %}<div class="next"><span>Recommended for Dax-A</span><strong>{{ board.next.next_action }}</strong><small>{{ board.next.project }} · manual priority {{ board.next.priority or 'unset' }}</small></div>{% endif %}
+</section>
+<div class="dashboard">
+  <section class="panel cary"><h2>Needs Cary <span>{{ board.needs_cary|length + board.decisions|length }}</span></h2>
+    <ul>{% for task in board.needs_cary %}{{ task_row(task) }}{% endfor %}
+    {% for decision in board.decisions %}<li><div><a href="{{ url_for('ops.decisions_page') }}"><strong>{{ decision.title }}</strong></a><small>Decision · requested by {{ decision.requested_by }}</small></div><span class="badge pending">pending</span></li>{% endfor %}
+    {% if not board.needs_cary and not board.decisions %}<li class="empty">Nothing currently needs Cary.</li>{% endif %}</ul>
+  </section>
+  <section class="panel"><h2>Staff Queue <span>{{ board.staff_queue|length }}</span></h2><ul>{% for task in board.staff_queue %}{{ task_row(task) }}{% else %}<li class="empty">No executable staff work.</li>{% endfor %}</ul></section>
+  <section class="panel blocked-panel"><h2>Waiting / Blocked <span>{{ board.waiting|length }}</span></h2><ul>{% for task in board.waiting %}{{ task_row(task) }}{% else %}<li class="empty">No blocked work.</li>{% endfor %}</ul></section>
+  <section class="panel risk"><h2>At Risk <span>{{ board.at_risk|length }}</span></h2><ul>{% for item in board.at_risk[:12] %}<li><div><strong>{{ item.name }}</strong><small>{{ item.reason }}</small></div></li>{% else %}<li class="empty">No rule violations detected.</li>{% endfor %}{% if board.at_risk|length > 12 %}<li class="empty">{{ board.at_risk|length - 12 }} more violations available through <code>/api/dashboard</code>.</li>{% endif %}</ul></section>
+  <section class="panel"><h2>Upcoming <span>{{ board.upcoming|length }}</span></h2><ul>{% for project in board.upcoming %}<li><div><a href="{{ url_for('ops.project_page', object_id=project.id) }}"><strong>{{ project.name }}</strong></a><small>{{ project.owner or 'Unowned' }}</small></div></li>{% else %}<li class="empty">No incubating projects.</li>{% endfor %}</ul></section>
+  <section class="panel"><h2>Recently Completed <span>{{ board.recent|length }}</span></h2><ul>{% for task in board.recent %}{{ task_row(task) }}{% else %}<li class="empty">No recent completions.</li>{% endfor %}</ul></section>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Task queue{% endblock %}
+{% block content %}
+<div class="page-title"><div><p class="eyebrow">Execution</p><h1>Task queue</h1></div><p>Actions require the version shown, preventing silent overwrites.</p></div>
+<details class="create"><summary>Create a task</summary>
+  <form method="post" action="{{ url_for('ops.create_task_ui') }}" class="form-grid">
+    <label>Project<select name="project_id" required>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+    <label>Title<input name="title" required></label><label>Owner<select name="owner"><option>Dax-A</option><option>Cary</option></select></label>
+    <label>Manual priority<input name="priority" type="number" min="1" max="5"></label><label class="wide">Description<textarea name="description"></textarea></label>
+    <label>Actor<select name="actor"><option>Dax-A</option><option>Cary</option></select></label><button>Create task</button>
+  </form>
+</details>
+<div class="table-wrap"><table><thead><tr><th>Task</th><th>Owner</th><th>Status</th><th>Priority</th><th>Version</th><th>Action</th></tr></thead><tbody>
+{% for task in tasks %}<tr><td><strong>{{ task.id }}</strong><br>{{ task.title }}{% if task.blocker_reason %}<small>{{ task.blocker_reason }}</small>{% endif %}</td><td>{{ task.owner or '—' }}</td><td><span class="badge {{ task.status }}">{{ task.status|replace('_',' ') }}</span></td><td>{{ task.priority or '—' }}</td><td>{{ task.version }}</td><td class="actions">
+  {% if task.status in ['ready','waiting'] %}<form method="post" action="{{ url_for('ops.task_action_ui', object_id=task.id, action='claim') }}"><input type="hidden" name="version" value="{{ task.version }}"><input type="hidden" name="actor" value="Dax-A"><button>Claim</button></form>{% endif %}
+  {% if task.status not in ['completed','cancelled'] %}<form method="post" action="{{ url_for('ops.task_action_ui', object_id=task.id, action='complete') }}"><input type="hidden" name="version" value="{{ task.version }}"><input type="hidden" name="actor" value="Dax-A"><button class="secondary">Complete</button></form>{% endif %}
+  {% if task.status not in ['blocked','completed','cancelled'] %}<details class="inline-action"><summary>Block</summary><form method="post" action="{{ url_for('ops.task_action_ui', object_id=task.id, action='block') }}"><input type="hidden" name="version" value="{{ task.version }}"><input type="hidden" name="actor" value="Dax-A"><input name="blocker_reason" placeholder="Reason" required><button class="danger">Block</button></form></details>{% endif %}
+</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,5 @@
+.actions { align-items: flex-start; }
+.inline-action summary { color: var(--red); cursor: pointer; font-size: 12px; }
+.inline-action form { display: flex; gap: 5px; margin-top: 5px; }
+.inline-action input { width: 150px; }
+.danger { background: var(--red); }
