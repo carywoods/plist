@@ -143,3 +143,7 @@ curl -X POST http://127.0.0.1:5000/api/tasks/TASK-0001/complete \
 - `POST /api/tasks/:id/claim|block|complete`
 - `GET /api/decisions/pending`, `POST /api/decisions`, `POST /api/decisions/:id/decide`
 - `POST /api/admin/sync` (Cary only)
+
+---
+
+Reviewed by Charlie on 2026-10-14.
