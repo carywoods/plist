@@ -1,0 +1,13 @@
+{
+  "id": "PROJECT-0002",
+  "name": "Operations Control Prototype",
+  "status": "active",
+  "priority": 2,
+  "owner": "Dax-A",
+  "summary": "Make current work legible and executable",
+  "next_action": "Migrate from SQLite to direct Git-backed JSON persistence",
+  "blocker": null,
+  "repo": "https://github.com/carywoods/plist",
+  "last_updated": "2026-10-14",
+  "version": 1
+}

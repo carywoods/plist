@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
-from . import mirror, service
-from .db import get_db, now_iso
+from . import service, storage
 
 bp = Blueprint("ops", __name__)
 
@@ -63,9 +62,8 @@ def decisions_page():
 
 @bp.get("/activity")
 def activity_page():
-    rows = [dict(row) for row in get_db().execute("SELECT * FROM activity ORDER BY id DESC LIMIT 200")]
-    failures = [dict(row) for row in get_db().execute("SELECT * FROM sync_failures WHERE resolved_at IS NULL ORDER BY id DESC")]
-    return render_template("activity.html", activity=rows, failures=failures)
+    rows = storage.list_activity(limit=200)
+    return render_template("activity.html", activity=rows, failures=[])
 
 
 @bp.post("/ui/tasks/<object_id>/<action>")
@@ -227,7 +225,7 @@ def api_create_decision():
 
 
 @bp.post("/api/decisions/<object_id>/decide")
-def api_decide(object_id):
+def decide_ui_api(object_id):
     data = payload()
     return response(service.decide(object_id, data, actor(data)))
 
@@ -236,10 +234,9 @@ def api_decide(object_id):
 def api_sync():
     data = payload()
     service.actor_allowed(actor(data), cary_only=True)
-    result = mirror.sync_all()
-    get_db().execute("UPDATE sync_failures SET resolved_at = ? WHERE resolved_at IS NULL", (now_iso(),))
-    get_db().commit()
-    return jsonify({"sync": result})
+    snapshot_path = storage.write_snapshot()
+    commit = storage.git_commit([snapshot_path], "ops: Cary requested manual snapshot sync")
+    return jsonify({"sync": {"mirrored": True, "git_commit": commit, "snapshot": str(snapshot_path)}})
 
 
 @bp.get("/api/dashboard")

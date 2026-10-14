@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from . import mirror
-from .db import add_activity, get_db, next_id, now_iso, row_dict
+from . import storage
 
 ACTORS = {"Cary", "Dax-A", "Charlie"}
-PROJECT_STATUSES = {"active", "incubating", "parked", "blocked", "completed", "archived"}
+PROJECT_STATUSES = {"active", "incubating", "parked", "blocked", "completed", "archived", "live", "planning", "planned", "concept"}
 TASK_STATUSES = {"ready", "claimed", "in_progress", "waiting", "blocked", "completed", "cancelled"}
 DELIVERABLE_STATUSES = {"planned", "active", "blocked", "completed", "cancelled"}
 
@@ -63,246 +62,171 @@ def _bounded(value, field: str) -> int | None:
     return number
 
 
-def _bool(value) -> int:
+def _bool(value) -> bool:
     if isinstance(value, str):
-        return int(value.lower() in {"1", "true", "yes", "on"})
-    return int(bool(value))
+        return value.lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
-def _finish_mutation(kind: str, object_id: str, occurred_at: str, message: str) -> dict:
+def _finish_mutation(paths: list[Path], commit_message: str) -> dict:
     try:
-        return mirror.sync_change(kind, object_id, occurred_at, message)
+        snapshot_path = storage.write_snapshot()
+        all_paths = [*paths, snapshot_path]
+        commit = storage.git_commit(all_paths, commit_message)
+        return {
+            "mirrored": True,
+            "git_commit": commit,
+            "files": [str(p) for p in all_paths],
+        }
     except Exception as exc:
-        db = get_db()
-        db.execute(
-            "INSERT INTO sync_failures(occurred_at, object_type, object_id, error) VALUES (?, ?, ?, ?)",
-            (now_iso(), kind, object_id, str(exc)),
-        )
-        db.commit()
         raise SyncFailure(
-            f"Live database was updated, but repository synchronization failed: {exc}",
-            details={"database_committed": True, "mirrored": False, "object_type": kind, "object_id": object_id},
+            f"Record saved, but Git commit/synchronization failed: {exc}",
+            details={"database_committed": True, "mirrored": False},
         ) from exc
 
 
-def _get(table: str, object_id: str) -> dict:
-    row = get_db().execute(f"SELECT * FROM {table} WHERE id = ?", (object_id,)).fetchone()
-    if row is None:
+def _get(kind: str, object_id: str) -> dict:
+    kind_clean = kind.rstrip("s")
+    if kind_clean == "project":
+        item = storage.get_project(object_id)
+    elif kind_clean == "task":
+        item = storage.get_task(object_id)
+    elif kind_clean == "decision":
+        item = storage.get_decision(object_id)
+    elif kind_clean == "deliverable":
+        d_list = storage.list_deliverables()
+        item = next((d for d in d_list if d["id"] == object_id), None)
+    elif kind_clean == "workstream":
+        w_list = storage.list_workstreams()
+        item = next((w for w in w_list if w["id"] == object_id), None)
+    else:
+        raise OpsError(f"Unknown kind {kind}")
+
+    if item is None:
         raise NotFound(f"{object_id} was not found")
-    return dict(row)
+    return item
 
 
 def list_records(table: str, where: str = "", params: tuple = ()) -> list[dict]:
-    suffix = f" WHERE {where}" if where else ""
-    return [dict(row) for row in get_db().execute(f"SELECT * FROM {table}{suffix} ORDER BY id", params)]
+    kind = table.rstrip("s")
+    if kind == "project":
+        records = storage.list_projects()
+    elif kind == "task":
+        status_filter = None
+        if "status = ?" in where and params:
+            status_filter = params[0]
+        records = storage.list_tasks(status=status_filter)
+        if "project_id = ?" in where and params:
+            records = [r for r in records if r.get("project_id") == params[0]]
+    elif kind == "decision":
+        status_filter = None
+        if "status = ?" in where and params:
+            status_filter = params[0]
+        records = storage.list_decisions(status=status_filter)
+        if "project_id = ?" in where and params:
+            records = [r for r in records if r.get("project_id") == params[0]]
+    elif kind == "deliverable":
+        proj_filter = None
+        if "project_id = ?" in where and params:
+            proj_filter = params[0]
+        records = storage.list_deliverables(project_id=proj_filter)
+    elif kind == "workstream":
+        records = storage.list_workstreams()
+    else:
+        records = []
+    return records
 
+
+# -----------------------------------------------------------------------------
+# Project Operations
+# -----------------------------------------------------------------------------
 
 def create_project(data: dict, actor: str) -> tuple[dict, dict]:
     actor_allowed(actor, cary_only=True)
-    _require(data, "name", "workstream_id", "status", "owner", "completion_definition")
-    if data["status"] not in PROJECT_STATUSES:
-        raise OpsError("Invalid project status")
-    db, stamp = get_db(), now_iso()
-    object_id = next_id("project", "PROJECT")
-    values = (
-        object_id, data["name"], data.get("description", ""), data["workstream_id"], data["status"], data["owner"],
-        _bounded(data.get("priority"), "priority"), _bounded(data.get("impact"), "impact"),
-        _bounded(data.get("urgency"), "urgency"), _bounded(data.get("effort"), "effort"),
-        data["completion_definition"], stamp, data.get("last_reviewed"), data.get("legacy_source"),
-        stamp, actor, stamp, actor, 1,
-    )
+    _require(data, "name")
+    proj_id = data.get("id") or storage.allocate_next_ic()
+    payload = {
+        "id": proj_id,
+        "name": data["name"],
+        "status": data.get("status", "active"),
+        "priority": _bounded(data.get("priority"), "priority"),
+        "owner": data.get("owner", actor),
+        "summary": data.get("summary") or data.get("description", ""),
+        "next_action": data.get("next_action", ""),
+        "blocker": data.get("blocker"),
+        "repo": data.get("repo"),
+        "completion_definition": data.get("completion_definition", ""),
+        "workstream_id": data.get("workstream_id", "WORKSTREAM-0001"),
+    }
     try:
-        db.execute("INSERT INTO projects VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values)
-    except Exception as exc:
-        db.rollback()
-        raise OpsError(f"Could not create project: {exc}") from exc
-    record = _get("projects", object_id)
-    summary = f"{actor} created project {record['name']}"
-    add_activity(actor, "created", "project", object_id, summary, None, record)
-    db.commit()
-    sync = _finish_mutation("project", object_id, stamp, f"ops: {actor} created {record['name']}")
+        record, path = storage.save_project(payload, actor)
+    except storage.StorageConflict as exc:
+        raise Conflict(str(exc), details={"current": exc.current_record}) from exc
+
+    summary_text = f"{actor} created project {record['name']} ({record['id']})"
+    _entry, act_path = storage.add_activity(actor, "created", "project", record["id"], summary_text, None, record)
+    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
     return record, sync
 
 
-def create_workstream(data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor, cary_only=True)
-    _require(data, "name", "owner")
-    db, stamp, object_id = get_db(), now_iso(), next_id("workstream", "WORKSTREAM")
-    db.execute(
-        "INSERT INTO workstreams VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-        (object_id, data["name"], data.get("description", ""), data["owner"], data.get("status", "active"), stamp, actor, stamp, actor),
-    )
-    record = _get("workstreams", object_id)
-    add_activity(actor, "created", "workstream", object_id, f"{actor} created workstream {record['name']}", None, record)
-    db.commit()
-    return record, _finish_mutation("workstream", object_id, stamp, f"ops: {actor} created {record['name']} workstream")
+PROJECT_MUTABLE_FIELDS = {
+    "name", "summary", "description", "status", "owner", "priority",
+    "next_action", "blocker", "repo", "completion_definition", "workstream_id",
+}
 
-
-def create_deliverable(data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor)
-    _require(data, "project_id", "title", "owner", "definition_of_done")
-    _get("projects", data["project_id"])
-    status = data.get("status", "planned")
-    if status not in DELIVERABLE_STATUSES:
-        raise OpsError("Invalid deliverable status")
-    db, stamp, object_id = get_db(), now_iso(), next_id("deliverable", "DELIVERABLE")
-    db.execute(
-        "INSERT INTO deliverables VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 1)",
-        (object_id, data["project_id"], data["title"], data.get("description", ""), data["owner"], status,
-         _bounded(data.get("priority"), "priority"), _bounded(data.get("impact"), "impact"),
-         _bounded(data.get("urgency"), "urgency"), _bounded(data.get("effort"), "effort"),
-         data.get("due_date"), data["definition_of_done"], stamp, actor, stamp, actor),
-    )
-    record = _get("deliverables", object_id)
-    add_activity(actor, "created", "deliverable", object_id, f"{actor} created deliverable {object_id}: {record['title']}", None, record)
-    db.commit()
-    return record, _finish_mutation("deliverable", object_id, stamp, f"ops: {actor} created {object_id}")
-
-
-PROJECT_FIELDS = {"name", "description", "workstream_id", "status", "owner", "priority", "impact", "urgency", "effort", "completion_definition", "last_reviewed"}
-TASK_FIELDS = {"project_id", "deliverable_id", "title", "description", "owner", "status", "priority", "impact", "urgency", "effort", "requires_cary", "delegatable", "blocked", "blocker_reason", "due_date", "completion_notes"}
+TASK_MUTABLE_FIELDS = {
+    "project_id", "deliverable_id", "title", "description", "owner", "status",
+    "priority", "impact", "urgency", "effort", "requires_cary", "delegatable",
+    "blocked", "blocker_reason", "due_date", "completion_notes",
+}
 
 
 def update_record(kind: str, object_id: str, data: dict, actor: str) -> tuple[dict, dict]:
-    table = {"project": "projects", "task": "tasks"}[kind]
     actor_allowed(actor, cary_only=(kind == "project"))
     if "version" not in data:
         raise OpsError("version is required for optimistic concurrency")
-    before = _get(table, object_id)
+
+    before = _get(kind, object_id)
     if int(data["version"]) != before["version"]:
-        raise Conflict(f"Version conflict: supplied {data['version']}, current version is {before['version']}", details={"current": before})
-    fields = PROJECT_FIELDS if kind == "project" else TASK_FIELDS
-    changes = {key: value for key, value in data.items() if key in fields}
+        raise Conflict(
+            f"Version conflict: supplied {data['version']}, current version is {before['version']}",
+            details={"current": before},
+        )
+
+    fields = PROJECT_MUTABLE_FIELDS if kind == "project" else TASK_MUTABLE_FIELDS
+    changes = {k: v for k, v in data.items() if k in fields}
     if not changes:
         raise OpsError("No mutable fields supplied")
-    if "status" in changes:
-        allowed = PROJECT_STATUSES if kind == "project" else TASK_STATUSES
-        if changes["status"] not in allowed:
-            raise OpsError("Invalid status")
-    for field in ("priority", "impact", "urgency", "effort"):
-        if field in changes:
-            changes[field] = _bounded(changes[field], field)
-    for field in ("requires_cary", "delegatable", "blocked"):
-        if field in changes:
-            changes[field] = _bool(changes[field])
-    if changes.get("status") == "blocked" and not changes.get("blocker_reason", before.get("blocker_reason")):
-        raise OpsError("blocker_reason is required when blocking a task")
-    stamp = now_iso()
-    changes.update(updated_at=stamp, updated_by=actor)
-    assignments = ", ".join(f"{key} = ?" for key in changes)
-    params = [*changes.values(), object_id, before["version"]]
-    cursor = get_db().execute(
-        f"UPDATE {table} SET {assignments}, version = version + 1 WHERE id = ? AND version = ?", params
-    )
-    if cursor.rowcount != 1:
-        get_db().rollback()
-        raise Conflict("Record changed while the update was in progress")
-    after = _get(table, object_id)
-    changed = [f"{key} {before.get(key)!r} -> {after.get(key)!r}" for key in changes if key not in {"updated_at", "updated_by"} and before.get(key) != after.get(key)]
-    summary = f"{actor} updated {object_id}: " + "; ".join(changed)
-    add_activity(actor, "updated", kind, object_id, summary, before, after)
-    get_db().commit()
-    name = after.get("name") or object_id
-    sync = _finish_mutation(kind, object_id, stamp, f"ops: {actor} updated {name}")
-    return after, sync
 
+    if "priority" in changes:
+        changes["priority"] = _bounded(changes["priority"], "priority")
 
-def create_task(data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor)
-    _require(data, "project_id", "title", "owner")
-    _get("projects", data["project_id"])
-    if data.get("deliverable_id"):
-        _get("deliverables", data["deliverable_id"])
-    status = data.get("status", "ready")
-    if status not in TASK_STATUSES:
-        raise OpsError("Invalid task status")
-    if status == "blocked" and not data.get("blocker_reason"):
-        raise OpsError("blocker_reason is required when blocking a task")
-    db, stamp, object_id = get_db(), now_iso(), next_id("task", "TASK")
-    completed_at = stamp if status == "completed" else None
-    db.execute(
-        "INSERT INTO tasks(id, project_id, deliverable_id, title, description, owner, status, priority, impact, urgency, effort, requires_cary, delegatable, blocked, blocker_reason, due_date, completed_at, completion_notes, created_at, created_by, updated_at, updated_by, version) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
-        (object_id, data["project_id"], data.get("deliverable_id"), data["title"], data.get("description", ""), data["owner"], status,
-         _bounded(data.get("priority"), "priority"), _bounded(data.get("impact"), "impact"), _bounded(data.get("urgency"), "urgency"), _bounded(data.get("effort"), "effort"),
-         _bool(data.get("requires_cary")), _bool(data.get("delegatable", True)), int(status == "blocked"), data.get("blocker_reason"), data.get("due_date"), completed_at, data.get("completion_notes"), stamp, actor, stamp, actor),
-    )
-    record = _get("tasks", object_id)
-    add_activity(actor, "created", "task", object_id, f"{actor} created {object_id}: {record['title']}", None, record)
-    db.commit()
-    return record, _finish_mutation("task", object_id, stamp, f"ops: {actor} created {object_id}")
+    merged = {**before, **changes, "version": before["version"]}
 
-
-def task_action(object_id: str, action: str, data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor)
-    before = _get("tasks", object_id)
-    if int(data.get("version", -1)) != before["version"]:
-        raise Conflict(f"Version conflict: supplied {data.get('version')}, current version is {before['version']}", details={"current": before})
-    if action == "claim":
-        if before["status"] not in {"ready", "waiting"}:
-            raise OpsError("Only ready or waiting tasks can be claimed")
-        changes = {"status": "claimed", "owner": actor}
-    elif action == "block":
-        _require(data, "blocker_reason")
-        changes = {"status": "blocked", "blocked": 1, "blocker_reason": data["blocker_reason"]}
-    elif action == "complete":
-        changes = {"status": "completed", "blocked": 0, "blocker_reason": None, "completed_at": now_iso(), "completion_notes": data.get("completion_notes", "")}
+    if kind == "project":
+        try:
+            after, path = storage.save_project(merged, actor)
+        except storage.StorageConflict as exc:
+            raise Conflict(str(exc), details={"current": exc.current_record}) from exc
+    elif kind == "task":
+        if changes.get("status") == "blocked" and not changes.get("blocker_reason", before.get("blocker_reason")):
+            raise OpsError("blocker_reason is required when blocking a task")
+        try:
+            after, path = storage.save_task(merged, actor)
+        except storage.StorageConflict as exc:
+            raise Conflict(str(exc), details={"current": exc.current_record}) from exc
     else:
-        raise OpsError("Unknown task action")
-    stamp = now_iso()
-    changes.update(updated_at=stamp, updated_by=actor)
-    assignments = ", ".join(f"{key} = ?" for key in changes)
-    cursor = get_db().execute(
-        f"UPDATE tasks SET {assignments}, version = version + 1 WHERE id = ? AND version = ?",
-        (*changes.values(), object_id, before["version"]),
-    )
-    if cursor.rowcount != 1:
-        get_db().rollback()
-        raise Conflict("Record changed while the update was in progress")
-    after = _get("tasks", object_id)
-    verb = {"claim": "claimed", "block": "blocked", "complete": "completed"}[action]
-    summary = f"{actor} {verb} {object_id}"
-    add_activity(actor, verb, "task", object_id, summary, before, after)
-    get_db().commit()
-    return after, _finish_mutation("task", object_id, stamp, f"ops: {actor} {verb} {object_id}")
+        raise OpsError(f"Cannot update {kind}")
 
-
-def create_decision(data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor)
-    _require(data, "title", "context")
-    if data.get("project_id"):
-        _get("projects", data["project_id"])
-    db, stamp, object_id = get_db(), now_iso(), next_id("decision", "DECISION")
-    db.execute(
-        "INSERT INTO decisions VALUES (?, ?, ?, ?, ?, 'pending', ?, NULL, NULL, NULL, ?, ?, ?, ?, 1)",
-        (object_id, data.get("project_id"), data["title"], data["context"], data.get("recommendation", ""), actor, stamp, actor, stamp, actor),
-    )
-    record = _get("decisions", object_id)
-    add_activity(actor, "requested", "decision", object_id, f"{actor} requested decision {object_id}: {record['title']}", None, record)
-    db.commit()
-    return record, _finish_mutation("decision", object_id, stamp, f"ops: {actor} requested {object_id}")
-
-
-def decide(object_id: str, data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor, cary_only=True)
-    _require(data, "decision")
-    before = _get("decisions", object_id)
-    if int(data.get("version", -1)) != before["version"]:
-        raise Conflict(f"Version conflict: supplied {data.get('version')}, current version is {before['version']}", details={"current": before})
-    if before["status"] != "pending":
-        raise OpsError("Decision is no longer pending")
-    stamp = now_iso()
-    cursor = get_db().execute(
-        "UPDATE decisions SET status='decided', decision=?, decided_by=?, decided_at=?, updated_at=?, updated_by=?, version=version+1 WHERE id=? AND version=?",
-        (data["decision"], actor, stamp, stamp, actor, object_id, before["version"]),
-    )
-    if cursor.rowcount != 1:
-        get_db().rollback()
-        raise Conflict("Decision changed while the update was in progress")
-    after = _get("decisions", object_id)
-    add_activity(actor, "decided", "decision", object_id, f"{actor} decided {object_id}", before, after)
-    get_db().commit()
-    return after, _finish_mutation("decision", object_id, stamp, f"ops: {actor} decided {object_id}")
+    changed = [
+        f"{k} {before.get(k)!r} -> {after.get(k)!r}"
+        for k in changes
+        if k not in {"updated_at", "updated_by"} and before.get(k) != after.get(k)
+    ]
+    summary_text = f"{actor} updated {object_id}: " + "; ".join(changed)
+    _entry, act_path = storage.add_activity(actor, "updated", kind, object_id, summary_text, before, after)
+    sync = _finish_mutation([path, act_path], f"ops: {actor} updated {object_id}")
+    return after, sync
 
 
 def park_project(object_id: str, data: dict, actor: str) -> tuple[dict, dict]:
@@ -311,63 +235,330 @@ def park_project(object_id: str, data: dict, actor: str) -> tuple[dict, dict]:
     return update_record("project", object_id, payload, actor)
 
 
-def next_task(owner: str | None = None) -> dict | None:
-    params: list = []
-    owner_sql = ""
-    if owner:
-        owner_sql = " AND t.owner = ?"
-        params.append(owner)
-    row = get_db().execute(
-        "SELECT t.*, p.name AS project_name, d.title AS deliverable_title, "
-        "(coalesce(t.impact, 3) * 3 + coalesce(t.urgency, 3) * 3 - coalesce(t.effort, 3)) AS suggested_score "
-        "FROM tasks t JOIN projects p ON p.id = t.project_id "
-        "LEFT JOIN deliverables d ON d.id = t.deliverable_id "
-        "WHERE t.status = 'ready' AND t.blocked = 0 AND p.status = 'active'" + owner_sql +
-        " ORDER BY CASE WHEN t.priority IS NULL THEN 1 ELSE 0 END, t.priority, suggested_score DESC, t.created_at LIMIT 1",
-        tuple(params),
-    ).fetchone()
-    if not row:
-        return None
-    item = dict(row)
-    return {
-        "project": item["project_name"], "project_id": item["project_id"],
-        "deliverable": item["deliverable_title"], "task_id": item["id"],
-        "next_action": item["title"], "owner": item["owner"], "priority": item["priority"],
-        "suggested_score": item["suggested_score"], "status": item["status"], "version": item["version"],
+# -----------------------------------------------------------------------------
+# Task Operations
+# -----------------------------------------------------------------------------
+
+def create_task(data: dict, actor: str) -> tuple[dict, dict]:
+    actor_allowed(actor)
+    _require(data, "project_id", "title", "owner")
+    _get("project", data["project_id"])
+
+    task_id = storage.allocate_next_task_id()
+    status = data.get("status", "ready")
+    if status == "blocked" and not data.get("blocker_reason"):
+        raise OpsError("blocker_reason is required when blocking a task")
+
+    payload = {
+        "id": task_id,
+        "project_id": data["project_id"],
+        "deliverable_id": data.get("deliverable_id"),
+        "title": data["title"],
+        "description": data.get("description", ""),
+        "owner": data["owner"],
+        "status": status,
+        "priority": _bounded(data.get("priority"), "priority"),
+        "impact": _bounded(data.get("impact"), "impact"),
+        "urgency": _bounded(data.get("urgency"), "urgency"),
+        "effort": _bounded(data.get("effort"), "effort"),
+        "requires_cary": _bool(data.get("requires_cary")),
+        "delegatable": _bool(data.get("delegatable", True)),
+        "blocked": _bool(data.get("blocked", status == "blocked")),
+        "blocker_reason": data.get("blocker_reason"),
+        "due_date": data.get("due_date"),
+        "completed_at": storage.now_iso() if status == "completed" else None,
+        "completion_notes": data.get("completion_notes"),
     }
+    try:
+        record, path = storage.save_task(payload, actor)
+    except storage.StorageConflict as exc:
+        raise Conflict(str(exc), details={"current": exc.current_record}) from exc
+
+    summary_text = f"{actor} created {task_id}: {record['title']}"
+    _entry, act_path = storage.add_activity(actor, "created", "task", task_id, summary_text, None, record)
+    sync = _finish_mutation([path, act_path], f"ops: {actor} created {task_id}")
+    return record, sync
+
+
+def task_action(object_id: str, action: str, data: dict, actor: str) -> tuple[dict, dict]:
+    actor_allowed(actor)
+    before = _get("task", object_id)
+    if int(data.get("version", -1)) != before["version"]:
+        raise Conflict(
+            f"Version conflict: supplied {data.get('version')}, current version is {before['version']}",
+            details={"current": before},
+        )
+
+    if action == "claim":
+        if before["status"] not in {"ready", "waiting"}:
+            raise OpsError("Only ready or waiting tasks can be claimed")
+        changes = {"status": "claimed", "owner": actor}
+    elif action == "block":
+        _require(data, "blocker_reason")
+        changes = {"status": "blocked", "blocked": True, "blocker_reason": data["blocker_reason"]}
+    elif action == "complete":
+        changes = {
+            "status": "completed",
+            "blocked": False,
+            "blocker_reason": None,
+            "completed_at": storage.now_iso(),
+            "completion_notes": data.get("completion_notes", ""),
+        }
+    else:
+        raise OpsError(f"Unknown task action {action}")
+
+    merged = {**before, **changes, "version": before["version"]}
+    try:
+        after, path = storage.save_task(merged, actor)
+    except storage.StorageConflict as exc:
+        raise Conflict(str(exc), details={"current": exc.current_record}) from exc
+
+    verb = {"claim": "claimed", "block": "blocked", "complete": "completed"}[action]
+    summary_text = f"{actor} {verb} {object_id}"
+    _entry, act_path = storage.add_activity(actor, verb, "task", object_id, summary_text, before, after)
+    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
+    return after, sync
+
+
+# -----------------------------------------------------------------------------
+# Decision Operations
+# -----------------------------------------------------------------------------
+
+def create_decision(data: dict, actor: str) -> tuple[dict, dict]:
+    actor_allowed(actor)
+    _require(data, "title", "context")
+    if data.get("project_id"):
+        _get("project", data["project_id"])
+
+    d_id = storage.allocate_next_decision_id()
+    payload = {
+        "id": d_id,
+        "project_id": data.get("project_id"),
+        "title": data["title"],
+        "context": data["context"],
+        "recommendation": data.get("recommendation", ""),
+        "status": "pending",
+        "requested_by": actor,
+    }
+    record, path = storage.save_decision(payload, actor)
+    summary_text = f"{actor} requested decision {d_id}: {record['title']}"
+    _entry, act_path = storage.add_activity(actor, "requested", "decision", d_id, summary_text, None, record)
+    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
+    return record, sync
+
+
+def decide(object_id: str, data: dict, actor: str) -> tuple[dict, dict]:
+    actor_allowed(actor, cary_only=True)
+    _require(data, "decision")
+    before = _get("decision", object_id)
+    if int(data.get("version", -1)) != before["version"]:
+        raise Conflict(
+            f"Version conflict: supplied {data.get('version')}, current version is {before['version']}",
+            details={"current": before},
+        )
+    if before["status"] != "pending":
+        raise OpsError("Decision is no longer pending")
+
+    stamp = storage.now_iso()
+    merged = {
+        **before,
+        "status": "decided",
+        "decision": data["decision"],
+        "decided_by": actor,
+        "decided_at": stamp,
+        "version": before["version"],
+    }
+    after, path = storage.save_decision(merged, actor)
+    summary_text = f"{actor} decided {object_id}"
+    _entry, act_path = storage.add_activity(actor, "decided", "decision", object_id, summary_text, before, after)
+    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
+    return after, sync
+
+
+# -----------------------------------------------------------------------------
+# Deliverable & Workstream Operations
+# -----------------------------------------------------------------------------
+
+def create_deliverable(data: dict, actor: str) -> tuple[dict, dict]:
+    actor_allowed(actor)
+    _require(data, "project_id", "title", "owner", "definition_of_done")
+    _get("project", data["project_id"])
+    record, path = storage.save_deliverable(data, actor)
+    summary_text = f"{actor} created deliverable {record['id']}: {record['title']}"
+    _entry, act_path = storage.add_activity(actor, "created", "deliverable", record["id"], summary_text, None, record)
+    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
+    return record, sync
+
+
+def create_workstream(data: dict, actor: str) -> tuple[dict, dict]:
+    actor_allowed(actor, cary_only=True)
+    _require(data, "name", "owner")
+    record, path = storage.save_workstream(data, actor)
+    summary_text = f"{actor} created workstream {record['name']}"
+    _entry, act_path = storage.add_activity(actor, "created", "workstream", record["id"], summary_text, None, record)
+    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
+    return record, sync
+
+
+# -----------------------------------------------------------------------------
+# What Next? & Operational Dashboard
+# -----------------------------------------------------------------------------
+
+def next_task(owner: str | None = None) -> dict | None:
+    projects = {p["id"]: p for p in storage.list_projects()}
+    tasks = storage.list_tasks(status="ready")
+
+    candidates = []
+    for t in tasks:
+        if t.get("blocked"):
+            continue
+        proj = projects.get(t.get("project_id"))
+        # Active or live projects only
+        if proj and proj.get("status") not in {"active", "live"}:
+            continue
+        if owner and t.get("owner") != owner:
+            continue
+        impact = t.get("impact") or 3
+        urgency = t.get("urgency") or 3
+        effort = t.get("effort") or 3
+        score = (impact * 3) + (urgency * 3) - effort
+        candidates.append({
+            "project": proj["name"] if proj else "Unknown",
+            "project_id": t.get("project_id"),
+            "deliverable": "",
+            "task_id": t["id"],
+            "next_action": t["title"],
+            "owner": t["owner"],
+            "priority": t.get("priority"),
+            "suggested_score": score,
+            "status": t["status"],
+            "version": t["version"],
+            "created_at": t.get("created_at", ""),
+        })
+
+    # If no standalone tasks match, check active projects with next_action
+    if not candidates:
+        for p in projects.values():
+            if p.get("status") in {"active", "live"} and p.get("next_action") and not p.get("blocker"):
+                if owner and p.get("owner") != owner:
+                    continue
+                candidates.append({
+                    "project": p["name"],
+                    "project_id": p["id"],
+                    "deliverable": "",
+                    "task_id": f"NEXT-{p['id']}",
+                    "next_action": p["next_action"],
+                    "owner": p.get("owner", "Dax-A"),
+                    "priority": p.get("priority"),
+                    "suggested_score": 10,
+                    "status": "ready",
+                    "version": p.get("version", 1),
+                    "created_at": p.get("created_at", ""),
+                })
+
+    if not candidates:
+        return None
+
+    # Priority sort: manual priority first (1..5, None last), then score desc, then created_at
+    candidates.sort(
+        key=lambda c: (
+            c["priority"] is None,
+            c["priority"] or 99,
+            -c["suggested_score"],
+            c["created_at"],
+        )
+    )
+    return candidates[0]
 
 
 def dashboard() -> dict:
-    db = get_db()
-    tasks = [dict(row) for row in db.execute("SELECT t.*, p.name project_name FROM tasks t JOIN projects p ON p.id=t.project_id ORDER BY coalesce(t.priority, 99), t.updated_at DESC")]
-    projects = [dict(row) for row in db.execute("SELECT * FROM projects ORDER BY coalesce(priority, 99), name")]
-    decisions = [dict(row) for row in db.execute("SELECT * FROM decisions WHERE status = 'pending' ORDER BY created_at")]
-    needs_cary = [t for t in tasks if t["requires_cary"] and t["status"] not in {"completed", "cancelled"}]
-    staff = [t for t in tasks if t["owner"] != "Cary" and t["status"] == "ready" and not t["blocked"]]
-    waiting = [t for t in tasks if t["status"] in {"waiting", "blocked"} or t["blocked"]]
-    recent = [t for t in tasks if t["status"] == "completed"][:8]
-    upcoming = [p for p in projects if p["status"] == "incubating"]
+    tasks = storage.list_tasks()
+    projects = storage.list_projects()
+    decisions = storage.list_decisions(status="pending")
+    proj_map = {p["id"]: p for p in projects}
+
+    for t in tasks:
+        t["project_name"] = proj_map.get(t["project_id"], {}).get("name", t.get("project_id", ""))
+
+    needs_cary = [
+        t for t in tasks
+        if t.get("requires_cary") and t.get("status") not in {"completed", "cancelled"}
+    ]
+    staff_queue = [
+        t for t in tasks
+        if t.get("owner") != "Cary" and t.get("status") == "ready" and not t.get("blocked")
+    ]
+    waiting = [
+        t for t in tasks
+        if t.get("status") in {"waiting", "blocked"} or t.get("blocked")
+    ]
+    recent = [
+        t for t in tasks
+        if t.get("status") == "completed"
+    ][:8]
+    upcoming = [
+        p for p in projects
+        if p.get("status") in {"incubating", "planning", "planned"}
+    ]
+
     now = datetime.now(timezone.utc)
     risk = []
+
     for project in projects:
-        if project["status"] != "active":
+        if project["status"] not in {"active", "live"}:
             continue
-        if not project["owner"]:
+        if not project.get("owner"):
             risk.append({"id": project["id"], "name": project["name"], "reason": "Active project has no owner"})
-        actionable = [t for t in tasks if t["project_id"] == project["id"] and t["status"] in {"ready", "claimed", "in_progress"} and not t["blocked"]]
-        if not actionable:
+
+        # Check actionability via tasks or project next_action
+        actionable_tasks = [
+            t for t in tasks
+            if t.get("project_id") == project["id"]
+            and t.get("status") in {"ready", "claimed", "in_progress"}
+            and not t.get("blocked")
+        ]
+        has_next_action = bool(project.get("next_action")) or bool(actionable_tasks)
+        if not has_next_action:
             risk.append({"id": project["id"], "name": project["name"], "reason": "Active project has no next action"})
-        if not project["completion_definition"]:
+
+        if not project.get("completion_definition") and not project.get("summary"):
             risk.append({"id": project["id"], "name": project["name"], "reason": "Active project has no completion definition"})
-        child_activity = [t["updated_at"] for t in tasks if t["project_id"] == project["id"]]
-        when = max([project["last_activity"] or project["updated_at"], *child_activity])
-        if datetime.fromisoformat(when.replace("Z", "+00:00")) < now - timedelta(days=14):
-            risk.append({"id": project["id"], "name": project["name"], "reason": "No activity for 14 days"})
+
+        last_act = project.get("last_activity") or project.get("last_updated") or project.get("updated_at")
+        if last_act:
+            try:
+                dt = datetime.fromisoformat(last_act.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if dt < now - timedelta(days=14):
+                    risk.append({"id": project["id"], "name": project["name"], "reason": "No activity for 14 days"})
+            except ValueError:
+                pass
+
     today = now.date().isoformat()
     for task in tasks:
-        if task["due_date"] and task["due_date"] < today and task["status"] not in {"completed", "cancelled"}:
+        if task.get("due_date") and task["due_date"] < today and task.get("status") not in {"completed", "cancelled"}:
             risk.append({"id": task["id"], "name": task["title"], "reason": "Task is overdue"})
-        if task["status"] == "blocked" and datetime.fromisoformat(task["updated_at"].replace("Z", "+00:00")) < now - timedelta(days=7):
-            risk.append({"id": task["id"], "name": task["title"], "reason": "Task blocked more than 7 days"})
-    return {"needs_cary": needs_cary, "staff_queue": staff, "waiting": waiting, "upcoming": upcoming,
-            "recent": recent, "at_risk": risk, "decisions": decisions, "projects": projects, "next": next_task("Dax-A")}
+        if task.get("status") == "blocked":
+            upd = task.get("updated_at")
+            if upd:
+                try:
+                    dt = datetime.fromisoformat(upd.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt < now - timedelta(days=7):
+                        risk.append({"id": task["id"], "name": task["title"], "reason": "Task blocked more than 7 days"})
+                except ValueError:
+                    pass
+
+    return {
+        "needs_cary": needs_cary,
+        "staff_queue": staff_queue,
+        "waiting": waiting,
+        "upcoming": upcoming,
+        "recent": recent,
+        "at_risk": risk,
+        "decisions": decisions,
+        "projects": projects,
+        "next": next_task("Dax-A"),
+    }

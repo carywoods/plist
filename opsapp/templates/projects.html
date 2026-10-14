@@ -1,21 +1,68 @@
 {% extends "base.html" %}
 {% block title %}Projects{% endblock %}
 {% block content %}
-<div class="page-title"><div><p class="eyebrow">Portfolio</p><h1>Projects</h1></div><p>Defined initiatives only. Legacy idea records remain safely in their original folders.</p></div>
+<div class="page-title">
+  <div>
+    <p class="eyebrow">Portfolio</p>
+    <h1>Projects ({{ projects|length }})</h1>
+  </div>
+  <p>Canonical project records across lifecycle folders: <code>live/</code>, <code>active/</code>, <code>planning/</code>, <code>planned/</code>, and <code>concept/</code>.</p>
+</div>
+
 <details class="create"><summary>Cary: create a project</summary>
   <form method="post" action="{{ url_for('ops.create_project_ui') }}" class="form-grid">
-    <label>Name<input name="name" required></label><label>Workstream<select name="workstream_id" required>{% for w in workstreams %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></label><label>Owner<select name="owner"><option>Cary</option><option>Dax-A</option></select></label>
-    <label>Status<select name="status"><option>active</option><option>incubating</option><option>parked</option></select></label><label>Manual priority<input type="number" name="priority" min="1" max="5"></label><label class="wide">Description<textarea name="description"></textarea></label>
-    <label class="wide">Definition of completion<textarea name="completion_definition" required></textarea></label><input type="hidden" name="actor" value="Cary"><button>Create project</button>
+    <label>Name<input name="name" required placeholder="Project initiative name"></label>
+    <label>Status
+      <select name="status">
+        <option value="active">active (active/)</option>
+        <option value="live">live (live/)</option>
+        <option value="planning">planning (planning/)</option>
+        <option value="planned">planned (planned/)</option>
+        <option value="concept">concept (concept/)</option>
+      </select>
+    </label>
+    <label>Owner
+      <select name="owner">
+        <option value="Cary">Cary</option>
+        <option value="Dax-A">Dax-A</option>
+      </select>
+    </label>
+    <label>Manual priority
+      <input type="number" name="priority" min="1" max="5" placeholder="1-5">
+    </label>
+    <label class="wide">Repository
+      <input name="repo" placeholder="https://github.com/...">
+    </label>
+    <label class="wide">Next action
+      <input name="next_action" placeholder="First actionable step">
+    </label>
+    <label class="wide">Summary
+      <textarea name="summary" placeholder="Summary of initiative"></textarea>
+    </label>
+    <input type="hidden" name="actor" value="Cary">
+    <button>Create project</button>
   </form>
 </details>
+
 <div class="project-grid">
 {% for project in projects %}
   <a class="project-card" href="{{ url_for('ops.project_page', object_id=project.id) }}">
-    <div><span class="badge {{ project.status }}">{{ project.status }}</span><span class="priority">P{{ project.priority or '—' }}</span></div>
-    <h2>{{ project.name }}</h2><p>{{ project.description }}</p>
-    <footer><span>{{ project.owner or 'No owner' }}</span><span>v{{ project.version }}</span></footer>
+    <div>
+      <span class="badge {{ project.status }}">{{ project.raw_status or project.status }}</span>
+      <span class="priority">P{{ project.priority or '—' }}</span>
+    </div>
+    <h2>{{ project.name }}</h2>
+    {% if project.next_action %}
+    <p><strong>Next:</strong> {{ project.next_action }}</p>
+    {% endif %}
+    <p>{{ project.summary or project.description }}</p>
+    <footer>
+      <span>{{ project.owner or 'No owner' }}</span>
+      <span>{{ project.id }} · v{{ project.version }}</span>
+    </footer>
   </a>
-{% else %}<p>No projects.</p>{% endfor %}
+{% else %}
+  <p>No projects.</p>
+{% endfor %}
 </div>
 {% endblock %}

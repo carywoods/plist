@@ -1,18 +1,88 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block content %}
-<div class="page-title"><div><p class="eyebrow">{{ project.id }} · {{ project.status }}</p><h1>{{ project.name }}</h1></div><p>{{ project.description }}</p></div>
-<dl class="facts"><div><dt>Owner</dt><dd>{{ project.owner or 'Missing' }}</dd></div><div><dt>Priority</dt><dd>{{ project.priority or 'Unset' }}</dd></div><div><dt>Version</dt><dd>{{ project.version }}</dd></div><div><dt>Last activity</dt><dd>{{ project.last_activity or project.updated_at }}</dd></div></dl>
-<section class="definition"><h2>Definition of completion</h2><p>{{ project.completion_definition or 'Missing — this active project is at risk.' }}</p></section>
+<div class="page-title">
+  <div>
+    <p class="eyebrow">{{ project.id }} · {{ project.status }} · {{ project.lifecycle_folder or 'root' }}</p>
+    <h1>{{ project.name }}</h1>
+  </div>
+  <p>{{ project.summary or project.description }}</p>
+</div>
+
+<dl class="facts">
+  <div><dt>Owner</dt><dd>{{ project.owner or 'Missing' }}</dd></div>
+  <div><dt>Priority</dt><dd>P{{ project.priority or '—' }}</dd></div>
+  <div><dt>Version</dt><dd>v{{ project.version }}</dd></div>
+  <div><dt>Last updated</dt><dd>{{ project.last_updated or project.updated_at }}</dd></div>
+  {% if project.repo %}
+  <div><dt>Repo</dt><dd><a href="{{ project.repo }}" target="_blank" rel="noopener">{{ project.repo }}</a></dd></div>
+  {% endif %}
+</dl>
+
+{% if project.next_action or project.blocker %}
+<div class="two-column">
+  {% if project.next_action %}
+  <section class="panel">
+    <h2>Next Action</h2>
+    <p><strong>{{ project.next_action }}</strong></p>
+  </section>
+  {% endif %}
+  {% if project.blocker %}
+  <section class="panel blocked-panel">
+    <h2>Blocker</h2>
+    <p class="badge blocked">{{ project.blocker }}</p>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if project.completion_definition %}
+<section class="definition">
+  <h2>Definition of completion</h2>
+  <p>{{ project.completion_definition }}</p>
+</section>
+{% endif %}
+
 <details class="create"><summary>Cary: update project state</summary>
   <form method="post" action="{{ url_for('ops.update_project_ui', object_id=project.id) }}" class="form-grid">
-    <input type="hidden" name="version" value="{{ project.version }}"><input type="hidden" name="actor" value="Cary">
-    <label>Owner<select name="owner"><option {% if project.owner == 'Cary' %}selected{% endif %}>Cary</option><option {% if project.owner == 'Dax-A' %}selected{% endif %}>Dax-A</option></select></label>
-    <label>Status<select name="status">{% for status in ['active','incubating','parked','blocked','completed','archived'] %}<option {% if project.status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></label>
-    <label>Manual priority<input name="priority" type="number" min="1" max="5" value="{{ project.priority or '' }}"></label>
-    <label class="wide">Definition of completion<textarea name="completion_definition">{{ project.completion_definition }}</textarea></label><button>Update project</button>
+    <input type="hidden" name="version" value="{{ project.version }}">
+    <input type="hidden" name="actor" value="Cary">
+    <label>Owner
+      <select name="owner">
+        <option value="">Unassigned</option>
+        <option {% if project.owner == 'Cary' %}selected{% endif %}>Cary</option>
+        <option {% if project.owner == 'Dax-A' %}selected{% endif %}>Dax-A</option>
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for status in ['active','live','planning','planned','concept','incubating','parked','blocked','completed','archived'] %}
+        <option {% if project.status == status or project.raw_status == status %}selected{% endif %}>{{ status }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Manual priority
+      <input name="priority" type="number" min="1" max="5" value="{{ project.priority or '' }}">
+    </label>
+    <label>Repository
+      <input name="repo" type="text" value="{{ project.repo or '' }}" placeholder="https://github.com/...">
+    </label>
+    <label class="wide">Next action
+      <input name="next_action" type="text" value="{{ project.next_action or '' }}" placeholder="What should be done next?">
+    </label>
+    <label class="wide">Blocker (leave empty if not blocked)
+      <input name="blocker" type="text" value="{{ project.blocker or '' }}" placeholder="Reason if blocked">
+    </label>
+    <label class="wide">Summary
+      <textarea name="summary">{{ project.summary or project.description }}</textarea>
+    </label>
+    <label class="wide">Definition of completion
+      <textarea name="completion_definition">{{ project.completion_definition }}</textarea>
+    </label>
+    <button>Update project</button>
   </form>
 </details>
+
 <div class="two-column">
   <section class="panel"><h2>Deliverables <span>{{ deliverables|length }}</span></h2><ul>{% for item in deliverables %}<li><div><strong>{{ item.title }}</strong><small>{{ item.definition_of_done }}</small></div><span class="badge {{ item.status }}">{{ item.status }}</span></li>{% else %}<li class="empty">No deliverables.</li>{% endfor %}</ul></section>
   <section class="panel"><h2>Tasks <span>{{ tasks|length }}</span></h2><ul>{% for item in tasks %}<li><div><strong>{{ item.title }}</strong><small>{{ item.owner }} · {{ item.blocker_reason or item.description }}</small></div><span class="badge {{ item.status }}">{{ item.status }}</span></li>{% else %}<li class="empty">No tasks.</li>{% endfor %}</ul></section>
