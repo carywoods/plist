@@ -117,14 +117,14 @@ def list_records(table: str, where: str = "", params: tuple = ()) -> list[dict]:
             status_filter = params[0]
         records = storage.list_tasks(status=status_filter)
         if "project_id = ?" in where and params:
-            records = [r for r in records if r.get("project_id") == params[0]]
+            records = [r for r in records if storage.matches_project_id(r.get("project_id"), params[0])]
     elif kind == "decision":
         status_filter = None
         if "status = ?" in where and params:
             status_filter = params[0]
         records = storage.list_decisions(status=status_filter)
         if "project_id = ?" in where and params:
-            records = [r for r in records if r.get("project_id") == params[0]]
+            records = [r for r in records if storage.matches_project_id(r.get("project_id"), params[0])]
     elif kind == "deliverable":
         proj_filter = None
         if "project_id = ?" in where and params:
@@ -142,9 +142,15 @@ def list_records(table: str, where: str = "", params: tuple = ()) -> list[dict]:
 # -----------------------------------------------------------------------------
 
 def create_project(data: dict, actor: str) -> tuple[dict, dict]:
-    actor_allowed(actor, cary_only=True)
+    actor_allowed(actor, cary_only=False)
     _require(data, "name")
-    proj_id = data.get("id") or storage.allocate_next_ic()
+    extra_paths = []
+    if data.get("id"):
+        proj_id = data["id"]
+    else:
+        proj_id, ic_path = storage.allocate_next_ic()
+        extra_paths.append(ic_path)
+
     payload = {
         "id": proj_id,
         "name": data["name"],
@@ -165,7 +171,7 @@ def create_project(data: dict, actor: str) -> tuple[dict, dict]:
 
     summary_text = f"{actor} created project {record['name']} ({record['id']})"
     _entry, act_path = storage.add_activity(actor, "created", "project", record["id"], summary_text, None, record)
-    sync = _finish_mutation([path, act_path], f"ops: {summary_text}")
+    sync = _finish_mutation([path, act_path, *extra_paths], f"ops: {summary_text}")
     return record, sync
 
 

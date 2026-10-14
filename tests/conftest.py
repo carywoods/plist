@@ -13,7 +13,7 @@ def repo(tmp_path) -> Path:
     r = tmp_path / "repo"
     for folder in ["live", "active", "planning", "planned", "concept", "priority"]:
         (r / folder).mkdir(parents=True, exist_ok=True)
-    for folder in ["tasks", "decisions", "deliverables", "workstreams", "activity", "snapshots", "projects"]:
+    for folder in ["tasks", "decisions", "deliverables", "workstreams", "activity", "snapshots"]:
         (r / "ops-data" / folder).mkdir(parents=True, exist_ok=True)
 
     # Initialize next_ic.json

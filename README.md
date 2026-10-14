@@ -22,8 +22,8 @@ Cary / Dax-A -> Web UI or JSON API -> Canonical JSON Files
 Charlie / Dax-A ---------------------------> reads/writes same Git repository files
 ```
 
-- **Source of truth:** Direct JSON files in lifecycle folders (`live/`, `active/`, `planning/`, `planned/`, `concept/`) and `ops-data/`.
-- **IC Number Allocation:** Managed via root-level `next_ic.json`, owned by Dax-A.
+- **Source of truth:** Direct JSON files in canonical lifecycle folders (`live/`, `active/`, `planning/`, `planned/`, `concept/`) and `ops-data/` (`tasks/`, `decisions/`, `deliverables/`, `workstreams/`, `activity/`, `snapshots/`). No secondary project mirrors.
+- **IC Number Allocation:** Managed via root-level `next_ic.json`. Dax-A and Cary can open projects; allocation, project file creation, and counter increment occur as a single atomic operation committed to Git.
 - **Priority Overlay:** Independent priority overlay in `priority/*.json` is applied on top of project records.
 - **Audit:** Every mutation records actor, action, object, timestamp, before state, and after state in append-only `ops-data/activity/YYYY-MM.ndjson`.
 - **Optimistic Concurrency:** Every mutable record carries an integer `version`. Updates require the version read by the caller; stale updates return HTTP `409 Conflict`.
@@ -102,6 +102,10 @@ The system automatically identifies conditions requiring attention:
 
 ### Priority Recommendation (`/api/next`)
 `/api/next` orders executable work for Dax-A by Cary's manual priority first. An algorithmic score (`impact * 3 + urgency * 3 - effort`) breaks ties only; it never overrides manual priority. Blocked, completed, cancelled, and parked work is excluded.
+
+### Security & Deployment Boundary
+- **Attribution vs Authentication:** The `X-Actor` header provides audit logging attribution, not cryptographic authentication. Access control (shared password / token authentication) is pending implementation.
+- **Network Boundary:** The application is intended strictly for internal private deployment over the local LAN and Tailscale mesh (`tailnet`). Never expose the HTTP port to public or untrusted networks without an access control gateway.
 
 ---
 
