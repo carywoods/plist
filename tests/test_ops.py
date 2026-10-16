@@ -120,7 +120,7 @@ def test_git_commit_integration(tmp_path):
     repo = tmp_path / "gitrepo"
     for folder in ["live", "active", "planning", "planned", "concept", "priority"]:
         (repo / folder).mkdir(parents=True, exist_ok=True)
-    for folder in ["tasks", "decisions", "deliverables", "workstreams", "activity", "snapshots", "projects"]:
+    for folder in ["tasks", "decisions", "deliverables", "workstreams", "activity", "snapshots"]:
         (repo / "ops-data" / folder).mkdir(parents=True, exist_ok=True)
 
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
@@ -142,7 +142,28 @@ def test_git_commit_integration(tmp_path):
     assert result.json["sync"]["git_commit"]
 
 
+def test_dax_can_create_project_and_bump_ic(client, repo):
+    res = client.post("/api/projects", headers={"X-Actor": "Dax-A"}, json={
+        "name": "Dax Initiative",
+        "summary": "Project opened by Dax-A",
+        "status": "active",
+        "owner": "Dax-A",
+        "completion_definition": "Done",
+    })
+    assert res.status_code == 201
+    data = res.json["data"]
+    assert data["id"] == "IC-000094"
+    assert data["owner"] == "Dax-A"
+
+    next_ic = json.loads((repo / "next_ic.json").read_text())
+    assert next_ic["next_ic_number"] == 95
+    assert next_ic["next_id"] == "IC-000095"
+
+    assert not (repo / "ops-data" / "projects").exists()
+
+
 def test_pages_render(client, base_records):
     for path in ["/", "/projects", f"/projects/{base_records['project']['id']}", "/tasks", "/decisions", "/activity"]:
         response = client.get(path)
         assert response.status_code == 200, path
+

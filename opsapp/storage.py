@@ -109,7 +109,7 @@ def slugify(text: str) -> str:
 # IC Number Tracking (next_ic.json)
 # -----------------------------------------------------------------------------
 
-def allocate_next_ic() -> str:
+def allocate_next_ic() -> tuple[str, Path]:
     path = repo_root() / "next_ic.json"
     next_num = 94
     if path.exists():
@@ -125,10 +125,10 @@ def allocate_next_ic() -> str:
         "next_id": f"IC-{next_num + 1:06d}",
         "updated_at": now_iso(),
         "owner": "Dax-A",
-        "notes": "Tracks next available IC number for Dax-A to assign to new projects.",
+        "notes": "Tracks next available IC number for Dax-A or Cary to assign to new projects.",
     }
     atomic_write_json(path, updated_data)
-    return ic_id
+    return ic_id, path
 
 
 # -----------------------------------------------------------------------------
@@ -225,23 +225,19 @@ def list_projects() -> list[dict]:
             except Exception:
                 continue
 
-    # Also check ops-data/projects for any standalone project records
-    od_projects = ops_data_root() / "projects"
-    if od_projects.is_dir():
-        for p in sorted(od_projects.glob("*.json")):
-            try:
-                with open(p, encoding="utf-8") as f:
-                    raw = json.load(f)
-                    pid = raw.get("id")
-                    if pid and pid not in projects:
-                        norm = _normalize_project_dict(raw, p, "active", overlays)
-                        projects[pid] = norm
-            except Exception:
-                continue
-
     result = list(projects.values())
     result.sort(key=lambda x: (x["priority"] is None, x["priority"] or 99, x["name"].lower()))
     return result
+
+
+def matches_project_id(pid: str | None, target: str | None) -> bool:
+    if not pid or not target:
+        return False
+    if pid == target:
+        return True
+    if target in {"PROJECT-0001", "IC-000004"} and pid in {"PROJECT-0001", "IC-000004"}:
+        return True
+    return False
 
 
 def get_project(project_id: str) -> dict | None:
@@ -327,13 +323,6 @@ def save_project(data: dict, actor: str) -> tuple[dict, Path]:
 
     record["_file_path"] = str(target_path.relative_to(repo_root()))
     record["lifecycle_folder"] = target_folder
-
-    # Also keep ops-data/projects updated for compatibility
-    od_path = ops_data_root() / "projects" / f"{proj_id}.json"
-    try:
-        atomic_write_json(od_path, record)
-    except Exception:
-        pass
 
     return record, target_path
 
@@ -535,7 +524,7 @@ def list_deliverables(project_id: str | None = None) -> list[dict]:
         try:
             with open(f, encoding="utf-8") as handle:
                 item = json.load(handle)
-                if project_id and item.get("project_id") != project_id:
+                if project_id and not matches_project_id(item.get("project_id"), project_id):
                     continue
                 items.append(item)
         except Exception:
@@ -699,6 +688,14 @@ def list_activity(limit: int = 200) -> list[dict]:
 def write_snapshot(day: str | None = None) -> Path:
     day = day or datetime.now(timezone.utc).date().isoformat()
     path = ops_data_root() / "snapshots" / f"{day}.json"
+    next_ic_path = repo_root() / "next_ic.json"
+    next_ic_data = None
+    if next_ic_path.exists():
+        try:
+            with open(next_ic_path, encoding="utf-8") as f:
+                next_ic_data = json.load(f)
+        except Exception:
+            pass
     snapshot = {
         "generated_at": now_iso(),
         "projects": list_projects(),
@@ -707,6 +704,7 @@ def write_snapshot(day: str | None = None) -> Path:
         "deliverables": list_deliverables(),
         "workstreams": list_workstreams(),
         "activity": list_activity(limit=1000),
+        "next_ic": next_ic_data,
     }
     atomic_write_json(path, snapshot)
     return path

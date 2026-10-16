@@ -6,756 +6,251 @@ This repository supports an internal operational control system whose primary pu
 
 **What should we work on next?**
 
-The system is not intended to become a generic project-management platform, CRM, idea registry, or collaboration suite.
+The system is not intended to become a generic project-management platform, CRM, idea registry, or collaboration suite. Avoid Jira/Asana/Monday feature bloat (no Gantt charts, timesheets, chat, social feeds, or workflow engines).
 
 Keep the application focused on operational state, priorities, ownership, next actions, decisions, and organizational memory.
 
----
-
-## Repository Context
-
-Repository:
-
-`carywoods/plist`
-
-The repository originally contains operational data files rather than a mature application.
-
-Treat existing files as potentially valuable organizational records.
-
-Do not delete, rename, reorganize, normalize, or rewrite existing data files without first understanding their contents and purpose.
-
-Prefer additive development over destructive restructuring.
-
-Git history is part of the recovery strategy.
+**Headline directive:** Stop redesigning `plist`; use it. Data curation is progressive.
 
 ---
 
-## Working Environment
+## Architectural Evolution & Failure History (Do Not Repeat)
 
-The repository may be located on a shared NAS mounted at:
+The architecture of `plist` was radically simplified on 2026-10-14 to eliminate a fundamentally flawed dual-state design. Every agent working in this repository must understand this history so the rejected pattern is never re-introduced.
+
+### Checkpoint Commits for Reference:
+- `7afba64`: Checkpoint saving pre-refactor state with SQLite database and separate `ops-data/` Git mirror.
+- `67cf016`: Complete refactor replacing SQLite persistence with direct Git-backed JSON persistence.
+- `26d54b6`: Baseline ratification and verification notes from Charlie and Dax-A.
+
+### Why the Dual-State SQLite Architecture Failed:
+1. **Network Filesystem Locking Hazards:** The live repository is hosted on a CIFS/SMB-mounted NAS share (`/mnt/dax/code/plist`). SQLite running over CIFS suffered from unreliable POSIX advisory file locking, broken shared-memory semantics (`wal` mode failure), and locking timeouts.
+2. **Dual Source of Truth / Desynchronization:** The previous flow (`API/UI -> SQLite live DB -> ops-data/ Git Mirror -> Git Commit`) created two disconnected operational worlds. The SQLite database frequently failed to commit to the share, falling back to an uncommitted shadow database in `/tmp/` and leaving a 0-byte uninitialized stub at `instance/ops.db`.
+3. **Silent Secondary Writes & Swallowed Failures:** `ops-data/projects/` was maintained as a best-effort second copy with swallowed failure paths (`try: ... except: pass`), leading to state divergence where records were reachable only through duplicate paths and record counts mismatched canonical lifecycle files.
+
+### The Immutable Architectural Rule:
+**There is exactly ONE operational state: the Git repository filesystem.**
+There is no SQLite database. There is no second database engine. There is no background synchronization loop between an operational database and a mirror. The Flask application and REST API operate directly as a thin layer over canonical JSON files on disk.
+
+---
+
+## Working Environment & Shared NAS Safety
+
+The repository is hosted on a shared NAS mounted at:
 
 `/mnt/dax/code/plist`
 
-Cary and Dax-A may both have access to the NAS share.
+Cary, Dax-A, and other operational agents access this NAS share across different hosts.
 
-Do not assume:
-
-- local filesystem semantics identical to ext4,
-- reliable file locking,
-- identical Linux UID/GID values across machines,
-- that all writers are operating from the same host,
-- or that filesystem ownership reflects NAS authorization.
-
-Avoid designs that depend heavily on local filesystem locks.
-
-The NAS is a shared working and handoff environment.
-
-Git remains the durable versioned record.
+### Rules for Safe CIFS/SMB File Operations:
+- **No Reliance on Advisory Locking:** Avoid SQLite, file locking libraries (`fcntl`, `flock`), or cross-process mutexes that depend on local POSIX filesystem semantics.
+- **Atomic Writes:** Every file modification must use atomic replacement:
+  1. Write to a temporary file located *in the exact same directory* as the target file (`dir=path.parent`).
+  2. Flush and force write buffers to physical media via `os.fsync(handle.fileno())`.
+  3. Atomically replace the target file via `os.replace(temp_path, target_path)`.
+- **Identity & Authorization:** Do not assume identical Linux UID/GID values across machines. Do not use `chmod` or filesystem permissions as an application security boundary.
+- **Fail Fast & Loudly:** Never swallow filesystem write errors. If a write or Git operation fails, surface the error immediately.
 
 ---
 
-## Current Actors
+## Current Actors & Authority Boundaries
 
-### Cary
-
+### 1. Cary
 Cary is the organizational owner and final authority.
-
 Cary may:
+- Set strategy and organizational priorities.
+- Create and modify workstreams.
+- Create, modify, park, or archive projects.
+- Approve spending and decisions.
+- Assign work across human and digital staff.
+- Manually override any algorithmic priority recommendation (Cary's priority is absolute).
 
-- create projects,
-- change priorities,
-- assign work,
-- approve decisions,
-- park initiatives,
-- archive initiatives,
-- approve spending,
-- override algorithmic recommendations,
-- and modify any operational record.
+### 2. Dax-A
+Dax-A is a trusted operational staff agent.
+Dax-A may:
+- Read current operational state.
+- Open new projects and allocate sequential IC numbers via `next_ic.json`.
+- Create deliverables and tasks.
+- Claim executable tasks.
+- Update task status and progress.
+- Mark tasks blocked and record specific blocker explanations.
+- Complete tasks and attach completion notes.
+- Create follow-up tasks.
+- Recommend priorities based on impact, urgency, and effort.
+- Request decisions from Cary.
+- **Restriction:** Dax-A does not independently make strategic decisions (parking/archiving initiatives, approving spend, or deciding pending decisions) unless explicitly authorized by Cary.
 
-### Dax-A
-
-Dax-A is a trusted operational agent.
-
-Dax-A should be able to:
-
-- read current operational state,
-- create tasks,
-- claim tasks,
-- update task status,
-- mark tasks blocked,
-- record blockers,
-- complete tasks,
-- attach completion notes,
-- create follow-up tasks,
-- recommend priorities,
-- and request decisions from Cary.
-
-Dax-A should not independently make major strategic decisions unless explicitly authorized.
-
-### Charlie
-
-Charlie is ChatGPT and does not currently have direct access to the live operational database or the NAS filesystem.
-
-Charlie may be able to read the Git repository.
-
-Therefore:
-
-**The Git repository must contain a sufficiently complete and current representation of operational state for Charlie to understand what is happening.**
-
-Do not design the system around the assumption that Charlie can query the production database.
+### 3. Charlie
+Charlie is ChatGPT (acting via Git PRs and repository reviews).
+- Charlie does not have direct access to the live API or local network.
+- Charlie interacts with the system through Git branches and pull requests (e.g., `origin/charlie`).
+- Charlie is strictly **read-only** from the perspective of live system operations. Operational mutations are never directly attributed to Charlie without review.
 
 ---
 
-## Source of Truth
+## Security & Deployment Boundary
 
-The architecture uses two copies of operational data.
-
-### 1. Live operational database
-
-The live database is the authoritative working state.
-
-Cary and Dax-A may interact with this system directly.
-
-Normal operational updates occur here.
-
-### 2. Git repository mirror
-
-The repository contains a structured, human-readable mirror of the operational state.
-
-The repository serves as:
-
-- organizational memory,
-- recovery data,
-- an audit-friendly historical record,
-- a readable representation for Charlie and other agents,
-- and a second copy of important operational information.
-
-The normal synchronization direction is:
-
-**Application/API → Live database → Git mirror**
-
-Do not implement uncontrolled bidirectional synchronization.
-
-Do not allow arbitrary Git edits to silently overwrite live database state.
-
-Repository-to-database restoration or import may be implemented later as an explicit administrative operation.
+- **Attribution vs. Authentication:** In this prototype, the `X-Actor` HTTP header is for audit attribution and logging, not cryptographic authentication. Access control (shared password / token authentication) is pending implementation.
+- **Deployment Boundary:** The application must remain strictly confined to the internal local LAN and Tailscale mesh (`tailnet`).
+- **Public Exposure Prohibition:** Never expose the HTTP port to public or untrusted networks without an access-control reverse proxy or gateway.
 
 ---
 
-## Core Design Principle
+## Core Objects & Directory Hierarchy
 
-No important organizational state should exist in only one place.
-
-A successful operational change should ultimately exist in:
-
-1. the live database, and
-2. the Git-readable mirror.
-
-Git commits provide additional historical protection.
-
----
-
-## Core Objects
-
-The primary hierarchy is:
-
-**Workstream → Project → Deliverable → Task**
-
-A lightweight Decision object is also required.
-
----
-
-## Workstream
-
-A Workstream represents an ongoing area of organizational activity.
-
-Examples:
-
-- Publishing
-- Teaching
-- Infrastructure
-- Product Operations
-- Marketing
-- AI and Model Evaluation
-
-Suggested fields:
-
-- id
-- name
-- description
-- owner
-- status
-- created_at
-- updated_at
-- updated_by
-- version
-
----
-
-## Project
-
-A Project represents a defined initiative.
-
-Examples include:
-
-- CommPilot
-- OnRamp
-- Bioscope
-- INT 204
-- WSWA 4.5
-
-Suggested fields:
-
-- id
-- name
-- description
-- workstream_id
-- status
-- owner
-- priority
-- impact
-- urgency
-- effort
-- last_activity
-- last_reviewed
-- created_at
-- created_by
-- updated_at
-- updated_by
-- version
-
-Suggested statuses:
-
-- active
-- incubating
-- parked
-- blocked
-- completed
-- archived
-
----
-
-## Deliverable
-
-A Deliverable represents a concrete outcome.
-
-Suggested fields:
-
-- id
-- project_id
-- title
-- description
-- owner
-- status
-- due_date
-- definition_of_done
-- created_at
-- created_by
-- updated_at
-- updated_by
-- version
-
----
-
-## Task
-
-A Task represents an executable action.
-
-Suggested fields:
-
-- id
-- project_id
-- deliverable_id
-- title
-- description
-- owner
-- status
-- priority
-- impact
-- urgency
-- effort
-- requires_cary
-- delegatable
-- blocked
-- blocker_reason
-- due_date
-- completed_at
-- created_at
-- created_by
-- updated_at
-- updated_by
-- version
-
-Suggested statuses:
-
-- ready
-- claimed
-- in_progress
-- waiting
-- blocked
-- completed
-- cancelled
-
----
-
-## Decision
-
-A Decision represents something requiring judgment rather than simple execution.
-
-Suggested fields:
-
-- id
-- project_id
-- title
-- context
-- recommendation
-- requested_by
-- status
-- decision
-- decided_by
-- created_at
-- decided_at
-- version
-
----
-
-## Mandatory Active-Project Rule
-
-Every active project must have:
-
-- an owner,
-- a next action,
-- and a definition of completion.
-
-The application should identify violations automatically.
-
-Examples:
-
-- active project with no owner,
-- active project with no next action,
-- active project without recent activity,
-- overdue next action,
-- blocked task without an explanation.
-
----
-
-## Dashboard
-
-The default interface should answer the operational question quickly.
-
-Primary sections:
-
-### Needs Cary
-
-Items requiring Cary's judgment, approval, direct work, writing, teaching, spending authorization, or strategic decision.
-
-### Staff Queue
-
-Executable work for Dax-A or other staff agents.
-
-### Waiting / Blocked
-
-Tasks and projects that cannot currently proceed.
-
-### Upcoming
-
-Important work likely to become active soon.
-
-### Recently Completed
-
-Recent task and deliverable completions.
-
-### At Risk
-
-Automatically identify conditions such as:
-
-- active project without an owner,
-- active project without a next action,
-- no activity for 14 days,
-- overdue task,
-- blocked task older than 7 days.
-
-Do not overload the dashboard.
-
----
-
-## Priority
-
-Priority scoring may assist decision-making but must never become the final authority.
-
-Possible factors:
-
-- impact
-- urgency
-- effort
-- requires_cary
-- delegatable
-- blocked
-
-Algorithmic priority is a recommendation.
-
-Cary's manual priority always wins.
-
----
-
-## Audit History
-
-Important mutations must create append-only history.
-
-Examples:
-
-- Cary changed CommPilot priority from 3 to 1.
-- Dax-A completed TASK-0184.
-- Cary parked Bioscope.
-- Dax-A marked TASK-0211 blocked.
-- Cary reassigned a task.
-
-Do not rely solely on current-row state.
-
-Preserve the sequence of meaningful operational changes.
-
----
-
-## Optimistic Concurrency
-
-Every mutable record should have a version number.
-
-Updates should specify the version being modified.
-
-If the current record has changed since it was read, reject the update rather than silently overwriting a newer change.
-
-Example:
-
-Caller attempts to update version 17.
-
-Database currently contains version 18.
-
-Result:
-
-**Reject and require reload.**
-
-This is especially important because Cary and Dax-A may update operational state independently.
-
----
-
-## Git Mirror
-
-The Git mirror should remain simple and readable.
-
-Recommended structure:
+The single operational state is structured as follows:
 
 ```text
-ops-data/
-  workstreams/
-  projects/
-  deliverables/
-  tasks/
-  decisions/
-  activity/
-  snapshots/
+/mnt/dax/code/plist/
+├── live/                   # Canonical projects running in production
+├── active/                 # Canonical projects under active development
+├── planning/               # Canonical projects actively planned for near-term
+├── planned/                # Canonical backlog initiatives with defined outcomes
+├── concept/                # Canonical incubating and parked ideas
+├── priority/               # Priority overlay JSON files
+├── next_ic.json            # Monotonic IC allocation counter
+└── ops-data/
+    ├── tasks/              # Executable tasks (TASK-*.json)
+    ├── decisions/          # Judgment requests (DECISION-*.json)
+    ├── deliverables/       # Concrete outcomes (DELIVERABLE-*.json)
+    ├── workstreams/        # Ongoing activity domains (WORKSTREAM-*.json)
+    ├── activity/           # Append-only audit logs (YYYY-MM.ndjson)
+    └── snapshots/          # Daily point-in-time state dumps (YYYY-MM-DD.json)
 ```
 
-Examples:
+> [!IMPORTANT]
+> The directory `ops-data/projects/` has been permanently retired and deleted. Canonical project records live strictly in the lifecycle folders (`live/`, `active/`, `planning/`, `planned/`, `concept/`).
 
-```text
-ops-data/projects/PROJECT-001.yaml
-ops-data/tasks/TASK-0184.yaml
-ops-data/decisions/DEC-0021.yaml
-ops-data/activity/2026-10.ndjson
-ops-data/snapshots/2026-10-12.json
-```
+### Workstream (`ops-data/workstreams/`)
+Represents an ongoing domain of organizational activity (e.g., Infrastructure, Publishing, Product Operations).
+Fields: `id`, `name`, `description`, `owner`, `created_at`, `created_by`, `updated_at`, `updated_by`, `version`.
 
-Use stable IDs.
+### Project (Lifecycle Folders)
+Represents a defined initiative.
+Canonical fields:
+- `id`: Monotonic identifier (`IC-XXXXXX` or `PROJECT-XXXX`)
+- `name`: Initiative title
+- `status`: Lifecycle status (`live`, `active`, `planning`, `planned`, `concept`)
+- `priority`: Manual priority rating (1 to 5; 1 is highest)
+- `owner`: Responsible actor (`Cary`, `Dax-A`)
+- `summary`: Context and goals
+- `next_action`: Immediate concrete next step
+- `completion_definition`: Objective definition of done
+- `blocker`: Blocker description (or `null`)
+- `repo`: Repository link or URL
+- `workstream_id`: Associated workstream
+- `version`: Monotonic integer for optimistic concurrency
+- `created_at`, `created_by`, `updated_at`, `updated_by`, `last_activity`
 
-Prefer:
+### Deliverable (`ops-data/deliverables/`)
+Represents a concrete milestone or deliverable within a project.
+Fields: `id`, `project_id`, `title`, `description`, `owner`, `status`, `due_date`, `definition_of_done`, `version`.
 
-- YAML for individual records,
-- NDJSON for append-only event logs,
-- JSON for full snapshots.
+### Task (`ops-data/tasks/`)
+Represents an executable unit of work.
+Fields: `id`, `project_id`, `deliverable_id`, `title`, `description`, `owner`, `status` (`ready`, `claimed`, `in_progress`, `waiting`, `blocked`, `completed`, `cancelled`), `priority`, `impact`, `urgency`, `effort`, `requires_cary`, `delegatable`, `blocked`, `blocker_reason`, `due_date`, `completion_notes`, `completed_at`, `version`.
 
-Generated output should be deterministic.
-
-Avoid unnecessary formatting churn that produces meaningless Git diffs.
+### Decision (`ops-data/decisions/`)
+Represents a judgment, policy choice, or spending authorization requiring Cary.
+Fields: `id`, `project_id`, `title`, `context`, `recommendation`, `requested_by`, `status` (`pending`, `decided`), `decision`, `decided_by`, `decided_at`, `version`.
 
 ---
 
-## Git Commits
+## IC Number Allocation (`next_ic.json`)
 
-Meaningful operational mutations should generate readable commits.
-
-Examples:
-
-```text
-ops: Cary changed CommPilot priority 3 -> 1
-ops: Dax-A completed TASK-0184
-ops: Cary parked Bioscope
-ops: Dax-A blocked TASK-0211
-```
-
-Do not hide synchronization failures.
-
-If:
-
-- mirror generation fails,
-- a file cannot be written,
-- Git staging fails,
-- Git commit fails,
-- or Git synchronization fails,
-
-surface the problem clearly.
-
-Never report successful mirroring unless it actually occurred.
-
----
-
-## Daily Snapshot
-
-Generate a complete point-in-time snapshot periodically.
-
-Daily is sufficient for the prototype.
-
-Example:
-
-```text
-ops-data/snapshots/2026-10-12.json
-```
-
-The snapshot should contain enough information to reconstruct operational state if the live database is lost.
-
----
-
-## API Philosophy
-
-The API must be straightforward enough for trusted agents to use.
-
-Likely endpoints include:
-
-```text
-GET    /api/next
-GET    /api/projects
-GET    /api/projects/:id
-GET    /api/tasks
-GET    /api/tasks/:id
-
-POST   /api/tasks
-PATCH  /api/tasks/:id
-
-POST   /api/tasks/:id/claim
-POST   /api/tasks/:id/complete
-POST   /api/tasks/:id/block
-
-POST   /api/projects/:id/park
-
-GET    /api/decisions/pending
-POST   /api/decisions
-```
-
-Do not treat these exact paths as mandatory if the existing framework suggests a cleaner design.
-
-Preserve the capability.
-
----
-
-## `/api/next`
-
-This is an important endpoint.
-
-A trusted agent should be able to ask:
-
-**What should I work on next?**
-
-A response should include enough context to act.
-
-Example:
+Root-level file `next_ic.json` coordinates sequential project identifiers:
 
 ```json
 {
-  "project": "CommPilot",
-  "deliverable": "Classifier model review",
-  "task_id": "TASK-0184",
-  "next_action": "Run production validation",
+  "next_ic_number": 95,
+  "next_id": "IC-000095",
+  "updated_at": "2026-10-14T14:45:00Z",
   "owner": "Dax-A",
-  "priority": 1,
-  "status": "ready"
+  "notes": "Tracks next available IC number for Dax-A or Cary to assign to new projects."
 }
 ```
 
-Do not return blocked, completed, cancelled, or unauthorized work as executable work.
+### Allocation Rules:
+1. Both Dax-A and Cary have authority to open projects and allocate IC numbers.
+2. Allocating an IC number, writing the new project JSON file, updating `next_ic.json`, and writing the audit entry must occur as a **single logical operation** committed together in Git.
 
 ---
 
-## Existing Data
+## Mandatory Active-Project Rule & Progressive Curation
 
-Existing repository data must be inspected before changes are made.
+### The Invariant:
+Every active project (`status: "active"` or in `active/`) must have:
+- an assigned **owner**,
+- an immediate **next action**, and
+- a clear **definition of completion**.
 
-Before modifying structures:
+The application flags rule violations automatically on the dashboard under **At Risk**.
 
-1. inventory existing files,
-2. identify data formats,
-3. identify duplicate or obsolete records,
-4. identify fields already being used,
-5. identify relationships between files,
-6. preserve useful historical information,
-7. avoid deleting uncertain records.
-
-When uncertain, preserve rather than destroy.
-
-Create migration tooling where practical.
-
-Do not manually transform large amounts of source data without repeatable logic.
+### Progressive Curation:
+- The legacy portfolio contains over 100 historical records with missing owners, unpopulated next actions, or undefined completion criteria.
+- **Do not relax validation rules to make the dashboard look clean.**
+- The warnings indicate real operational debt. Resolving these violations progressively as initiatives are touched is normal operational work.
 
 ---
 
-## Development Rules
+## Priority and `/api/next`
 
-### Keep it simple
+### Authority Principle:
+Algorithmic scoring (`impact * 3 + urgency * 3 - effort`) assists decision-making, but **Cary's manual priority is absolute.**
 
-Prefer the smallest architecture that satisfies the operational requirement.
-
-Avoid premature infrastructure.
-
-### Do not build a generic project manager
-
-Do not add features simply because Jira, Asana, Monday, Notion, or similar tools have them.
-
-Avoid unless specifically requested:
-
-- Gantt charts,
-- chat,
-- internal messaging,
-- document editing,
-- CRM,
-- timesheets,
-- complex reporting,
-- social features,
-- elaborate notification systems,
-- excessive role systems,
-- custom workflow builders.
-
-### Preserve recoverability
-
-A database failure must not destroy organizational state.
-
-### Preserve readability
-
-A knowledgeable human or AI agent should be able to inspect the Git mirror and understand the organization.
-
-### Preserve auditability
-
-Important changes should be attributable to an actor and time.
-
-### Prefer explicit behavior
-
-Avoid hidden automation that silently changes strategic state.
+### `/api/next` Endpoint Behavior:
+When Dax-A or another actor asks "What should I work on next?":
+1. The endpoint returns the highest manual priority task assigned to the actor (or unassigned delegatable work).
+2. Algorithmic scores break ties only among tasks with identical manual priority.
+3. Blocked, completed, cancelled, or parked initiatives are strictly excluded.
+4. Returns actionable context: project name, deliverable, task ID, next action, priority, and version.
 
 ---
 
-## Code Changes
+## Optimistic Concurrency Control
 
-Before making substantial changes:
-
-1. inspect the repository,
-2. inspect existing application files if present,
-3. inspect package manifests,
-4. inspect database configuration,
-5. inspect deployment configuration,
-6. understand existing conventions.
-
-Do not migrate frameworks merely because another framework is preferred.
-
-Reuse existing architecture where practical.
+Every mutable record contains a monotonic integer `version`.
+- Updates must provide the `version` that was read by the client.
+- If the file on disk has a different version, the update is rejected with HTTP `409 Conflict`.
+- Clients must reload the fresh state and re-apply changes. Never overwrite concurrent updates.
 
 ---
 
-## Testing
+## Audit History & Git Commits
 
-At minimum, test:
+### Audit Log (`ops-data/activity/`):
+Every operational mutation creates an append-only entry in `ops-data/activity/YYYY-MM.ndjson`:
+- Captures: `id`, `occurred_at`, `actor`, `action`, `object_type`, `object_id`, `summary`, `before`, and `after`.
 
-- create project,
-- update project,
-- create task,
-- claim task,
-- block task,
-- complete task,
-- create decision,
-- concurrency conflict,
-- Git mirror generation,
-- Git activity generation,
-- dashboard classification,
-- `/api/next`,
-- snapshot generation.
+### Git Commits:
+Every state-changing API or UI action creates an atomic Git commit:
+- Stages the modified canonical JSON file(s), `next_ic.json` (if bumped), the daily snapshot, and the updated activity log.
+- Generates a human-readable commit message:
+  ```text
+  ops: Dax-A claimed TASK-0001
+  ops: Cary decided DECISION-0002
+  ops: Dax-A created project CommPilot Production (IC-000094)
+  ```
+- If Git staging or commit fails, a `SyncFailure` (HTTP 503) is raised to alert operators immediately.
 
-Test failure paths as well as success paths.
-
-A mirror failure must not be mistaken for success.
-
----
-
-## Shared NAS Safety
-
-Because the working tree may live on a CIFS/SMB-mounted NAS:
-
-- do not assume file ownership reflects actual authorization,
-- avoid relying on chmod/chown as an application-security mechanism,
-- do not store secrets in repository files,
-- avoid brittle filesystem locking,
-- write generated files atomically where practical,
-- expect occasional network or filesystem latency,
-- handle failed writes safely,
-- do not corrupt an existing mirror file if generation fails halfway through.
-
-Prefer:
-
-1. write temporary file,
-2. validate content,
-3. atomically replace target where supported.
-
----
-
-## Secrets
-
-Never commit:
-
-- passwords,
-- API keys,
-- NAS credentials,
-- GitHub tokens,
-- database passwords,
-- authentication secrets.
-
-Use environment variables or appropriate secret-management mechanisms.
-
-Provide `.env.example` files containing variable names only.
+### Daily Snapshots (`ops-data/snapshots/`):
+A full point-in-time snapshot is generated daily at `ops-data/snapshots/YYYY-MM-DD.json`. The snapshot includes all projects, tasks, decisions, deliverables, workstreams, recent activity, and the current `next_ic` counter.
 
 ---
 
 ## Git Workflow
 
-Development may occur directly on `main` unless Cary explicitly requests a branch.
-
-Do not create branches solely because conventional software workflows normally use them.
-
-This repository is small and Git history already provides rollback.
-
-Before destructive or large-scale structural changes, create a checkpoint commit.
-
-Use clear commit messages.
+- **Stable Main:** The `main` branch is the stable, authoritative operating state.
+- **Feature & Documentation Changes:** Substantial codebase or architectural modifications occur on branches and merge via Pull Request.
+- **Charlie Integration:** Charlie operates on the `charlie` branch (or topic branches) and enters `main` via PR.
+- **Routine Operational Changes:** Routine state mutations executed through the application commit directly to Git on the active deployment.
 
 ---
 
-## Definition of Prototype Success
+## Definition of Success
 
-The prototype is successful if:
-
-1. Cary can open the application and quickly understand what needs attention.
-2. Cary can change organizational state.
-3. Dax-A can safely execute and update assigned work.
-4. Every important change is attributable.
-5. Current state is mirrored to Git.
-6. Charlie can inspect the repository and understand current operational state without database access.
-7. A database failure does not erase the organization's operational history.
-8. The system remains small enough for one person and a small digital staff to maintain.
-
-The goal is not feature completeness.
-
-The goal is a dependable operational control system.
+1. Cary can open the application and instantly see what needs attention.
+2. Dax-A can autonomously query `/api/next`, execute tasks, record blockers, and allocate projects.
+3. Every operational change is attributable to an actor and timestamped.
+4. The Git repository is always up to date and understandable by Charlie without any database access.
+5. The system remains simple, dependable, and free of extraneous infrastructure.
