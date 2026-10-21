@@ -5,7 +5,7 @@
 <details class="create"><summary>Create a task</summary>
   <form method="post" action="{{ url_for('ops.create_task_ui') }}" class="form-grid">
     <label>Project<select name="project_id" required>{% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
-    <label>Title<input name="title" required></label><label>Owner<select name="owner"><option>Dax-A</option><option>Cary</option></select></label>
+    <label>Title<input name="title" required></label><label>Owner<select name="owner">{% for owner in owners %}<option {% if owner == 'Dax-A' %}selected{% endif %}>{{ owner }}</option>{% endfor %}</select></label>
     <label>Manual priority<input name="priority" type="number" min="1" max="5"></label><label class="wide">Description<textarea name="description"></textarea></label>
     <label>Actor<select name="actor"><option>Dax-A</option><option>Cary</option></select></label><button>Create task</button>
   </form>

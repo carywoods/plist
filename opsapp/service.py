@@ -6,6 +6,9 @@ from pathlib import Path
 from . import storage
 
 ACTORS = {"Cary", "Dax-A", "Charlie"}
+# Who may own a project, task or deliverable (display order). Owning is separate
+# from write authority, which is still governed by ACTORS above.
+OWNERS = ("Cary", "Dax-A", "Emi", "Claude", "Charlie", "Lexi")
 PROJECT_STATUSES = {"active", "incubating", "parked", "blocked", "completed", "archived", "live", "planning", "planned", "concept"}
 TASK_STATUSES = {"ready", "claimed", "in_progress", "waiting", "blocked", "completed", "cancelled"}
 DELIVERABLE_STATUSES = {"planned", "active", "blocked", "completed", "cancelled"}
@@ -66,6 +69,15 @@ def _bool(value) -> bool:
     if isinstance(value, str):
         return value.lower() in {"1", "true", "yes", "on"}
     return bool(value)
+
+
+def _owner(value) -> str | None:
+    """Validate an owner against the roster. Blank means unassigned."""
+    if value in (None, ""):
+        return None
+    if value not in OWNERS:
+        raise OpsError(f"Unknown owner '{value}'. Use one of: {', '.join(OWNERS)}.")
+    return value
 
 
 def _finish_mutation(paths: list[Path], commit_message: str) -> dict:
@@ -156,7 +168,7 @@ def create_project(data: dict, actor: str) -> tuple[dict, dict]:
         "name": data["name"],
         "status": data.get("status", "active"),
         "priority": _bounded(data.get("priority"), "priority"),
-        "owner": data.get("owner", actor),
+        "owner": _owner(data.get("owner")) or actor,
         "summary": data.get("summary") or data.get("description", ""),
         "next_action": data.get("next_action", ""),
         "blocker": data.get("blocker"),
@@ -206,6 +218,8 @@ def update_record(kind: str, object_id: str, data: dict, actor: str) -> tuple[di
 
     if "priority" in changes:
         changes["priority"] = _bounded(changes["priority"], "priority")
+    if "owner" in changes:
+        changes["owner"] = _owner(changes["owner"])
 
     merged = {**before, **changes, "version": before["version"]}
 
@@ -261,7 +275,7 @@ def create_task(data: dict, actor: str) -> tuple[dict, dict]:
         "deliverable_id": data.get("deliverable_id"),
         "title": data["title"],
         "description": data.get("description", ""),
-        "owner": data["owner"],
+        "owner": _owner(data["owner"]),
         "status": status,
         "priority": _bounded(data.get("priority"), "priority"),
         "impact": _bounded(data.get("impact"), "impact"),

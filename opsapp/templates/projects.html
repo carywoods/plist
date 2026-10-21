@@ -23,8 +23,8 @@
     </label>
     <label>Owner
       <select name="owner">
-        <option value="Cary">Cary</option>
-        <option value="Dax-A">Dax-A</option>
+        {% for owner in owners %}<option value="{{ owner }}" {% if owner == 'Cary' %}selected{% endif %}>{{ owner }}</option>
+        {% endfor %}
       </select>
     </label>
     <label>Manual priority

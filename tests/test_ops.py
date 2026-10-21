@@ -167,3 +167,36 @@ def test_pages_render(client, base_records):
         response = client.get(path)
         assert response.status_code == 200, path
 
+
+
+def test_owner_roster_covers_staff_seats_and_rejects_unknown(client, base_records):
+    project = base_records["project"]
+
+    for seat in ("Emi", "Claude", "Charlie", "Lexi"):
+        updated = client.patch(
+            f"/api/projects/{project['id']}",
+            headers={"X-Actor": "Cary"},
+            json={"version": project["version"], "owner": seat},
+        )
+        assert updated.status_code == 200, seat
+        assert updated.json["data"]["owner"] == seat
+        project = updated.json["data"]
+
+    task = create_task(client, base_records, owner="Emi")
+    assert task.status_code == 201
+    assert task.json["data"]["owner"] == "Emi"
+
+    rejected = client.patch(
+        f"/api/projects/{project['id']}",
+        headers={"X-Actor": "Cary"},
+        json={"version": project["version"], "owner": "Nobody"},
+    )
+    assert rejected.status_code == 400
+
+
+def test_owner_dropdown_lists_full_roster(client, base_records):
+    page = client.get("/projects")
+    assert page.status_code == 200
+    body = page.data.decode()
+    for seat in ("Cary", "Dax-A", "Emi", "Claude", "Charlie", "Lexi"):
+        assert f'value="{seat}"' in body, seat

@@ -23,8 +23,13 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     from .cli import register_cli
     from .routes import bp
+    from .service import OWNERS
 
     app.register_blueprint(bp)
     register_cli(app)
+
+    @app.context_processor
+    def inject_owner_roster():
+        return {"owners": OWNERS}
 
     return app

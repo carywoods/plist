@@ -50,8 +50,8 @@
     <label>Owner
       <select name="owner">
         <option value="">Unassigned</option>
-        <option {% if project.owner == 'Cary' %}selected{% endif %}>Cary</option>
-        <option {% if project.owner == 'Dax-A' %}selected{% endif %}>Dax-A</option>
+        {% for owner in owners %}<option {% if project.owner == owner %}selected{% endif %}>{{ owner }}</option>
+        {% endfor %}
       </select>
     </label>
     <label>Status
@@ -90,7 +90,7 @@
 <details class="create"><summary>Create a deliverable</summary>
   <form method="post" action="{{ url_for('ops.create_deliverable_ui') }}" class="form-grid">
     <input type="hidden" name="project_id" value="{{ project.id }}"><input type="hidden" name="actor" value="Dax-A">
-    <label>Title<input name="title" required></label><label>Owner<select name="owner"><option>Dax-A</option><option>Cary</option></select></label><label>Status<select name="status"><option>planned</option><option>active</option></select></label>
+    <label>Title<input name="title" required></label><label>Owner<select name="owner">{% for owner in owners %}<option {% if owner == 'Dax-A' %}selected{% endif %}>{{ owner }}</option>{% endfor %}</select></label><label>Status<select name="status"><option>planned</option><option>active</option></select></label>
     <label class="wide">Definition of done<textarea name="definition_of_done" required></textarea></label><button>Create deliverable</button>
   </form>
 </details>
