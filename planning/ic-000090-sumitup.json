@@ -1,9 +1,20 @@
 {
+  "blocker": "Cary decision required (ICR action 1): confirm mobile, Android-first vs both stores, and whether the $2.99 subscription survives as Phase 2.",
+  "completion_definition": "Signed Android build live on Google Play with AdMob rewarded ads and no backend, judged against a written 30-day retention / organic-install kill criterion.",
+  "created_at": "2026-10-12T00:00:00Z",
+  "created_by": "legacy-import",
   "id": "IC-000090",
+  "last_activity": "2026-10-21T14:03:39Z",
+  "last_updated": "2026-10-21",
   "name": "Sumitup",
-  "status": "planning",
+  "next_action": "Close the packaging gap: install Godot 4 + Android SDK/JDK on a scratch host and export the existing 6x6 grid as a signed debug APK (ICR action 2).",
+  "owner": "Dax-A",
   "priority": "P2",
-  "source": "idea_census_project_registry_ic_numbers_recovered.csv",
-  "migrated_on": "2026-10-12",
-  "last_updated": "2026-10-12"
+  "repo": "https://github.com/carywoods/sumitup",
+  "status": "planning",
+  "summary": "Free, ad-supported single-player number-puzzle game (swap tiles until a row or column sums to the target). Corrected 2026-10-21: there is NO web prototype - the repo holds one commit (2025-07-15), a stock Vite demo frontend and a one-line backend placeholder; the real game is a 222-line pygame desktop prototype (Alpha 0.4a) plus DIFFICULTY_LEVELS.md. ICR verdict: buildable Mostly from internal capability; genuine gaps are mobile packaging, ad SDK integration and a store account, with unavoidable spend of $25-40 to first revenue.",
+  "updated_at": "2026-10-21T14:03:39Z",
+  "updated_by": "Dax-A",
+  "version": 2,
+  "workstream_id": "WORKSTREAM-0003"
 }

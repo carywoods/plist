@@ -1,6 +1,6 @@
 {
   "name": "Sumitup",
   "priority": "P2",
-  "reason": "Working web prototype; MVP goal is 1,000 users; web-first launch with email authentication and later social challenge features; build can be largely delegated in-house.",
-  "last_updated": "2026-10-09"
+  "reason": "No web prototype exists (corrected 2026-10-21): the repo holds one commit from 2025-07-15 with a stock Vite demo frontend and a one-line backend placeholder; the real game is a 222-line pygame desktop prototype (Alpha 0.4a) plus DIFFICULTY_LEVELS.md. Web-first launch with email authentication is abandoned; the MVP is free, ad-supported, single-player and mobile-leaning, with no backend. ICR (2026-10-21) verdict: Mostly buildable from internal capability; genuine gaps are mobile packaging, an ad SDK and a store account; $25-40 unavoidable spend to first revenue; 1,000-user goal retained as a retention test, not a revenue target.",
+  "last_updated": "2026-10-21"
 }
