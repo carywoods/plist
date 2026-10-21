@@ -1,9 +1,20 @@
 {
+  "blocker": null,
+  "completion_definition": "Fully operational in production; ongoing work is maintenance only.",
+  "created_at": "2026-10-21T12:06:38Z",
+  "created_by": "system",
   "id": "IC-000004",
+  "last_activity": "2026-10-21T12:06:38Z",
+  "last_updated": "2026-10-21",
   "name": "CommPilot (email AI assistant)",
-  "status": "live",
+  "next_action": "Maintain production service; no open build work.",
+  "owner": "Cary",
   "priority": null,
-  "source": "idea_census_project_registry_ic_numbers_recovered.csv",
-  "migrated_on": "2026-10-12",
-  "last_updated": "2026-10-12"
+  "repo": null,
+  "status": "live",
+  "summary": "Fully operational in production.",
+  "updated_at": "2026-10-21T12:06:38Z",
+  "updated_by": "Dax-A",
+  "version": 2,
+  "workstream_id": "WORKSTREAM-0001"
 }
