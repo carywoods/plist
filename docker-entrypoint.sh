@@ -36,6 +36,20 @@ git config --global user.name "${OPS_GIT_USER_NAME:-Dax-A}"
 git config --global user.email "${OPS_GIT_USER_EMAIL:-herm@indybiosystems.com}"
 git config --global --add safe.directory "$REPO_DIR"
 
+# Read path: an explicit OPS_GIT_REMOTE_URL wins; otherwise use SSH once the
+# deploy key is authorized (that keeps working if the repo goes private) and
+# fall back to HTTPS while it is public and the key is not on the repo yet.
+if [ -n "${OPS_GIT_REMOTE_URL:-}" ]; then
+  FETCH_URL="$OPS_GIT_REMOTE_URL"
+elif git ls-remote --exit-code "$PUSH_URL" >/dev/null 2>&1; then
+  FETCH_URL="$PUSH_URL"
+  echo "plist: deploy key can read $PUSH_URL — fetching over SSH"
+else
+  FETCH_URL="https://github.com/carywoods/plist.git"
+  echo "plist: deploy key cannot read $PUSH_URL yet — falling back to HTTPS fetch"
+fi
+REPO_URL="$FETCH_URL"
+
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo "plist: cloning $REPO_URL ($BRANCH) into $REPO_DIR"
   attempt=0
