@@ -9,6 +9,7 @@ description = "Small operational control system with a Git-readable mirror"
 requires-python = ">=3.11"
 dependencies = [
   "Flask>=3.0,<4",
+  "gunicorn>=21,<24; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]

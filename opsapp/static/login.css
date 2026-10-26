@@ -1,0 +1,6 @@
+.login-page{display:grid;place-items:center;min-height:100vh;padding:24px}
+.login-card{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px}
+.login-card h1{margin:0 0 20px;font:700 22px Georgia,serif}
+.login-card h1 span{font-weight:800;color:var(--green);margin-right:8px}
+.login-card label{display:grid;gap:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px}
+.login-card button{width:100%}

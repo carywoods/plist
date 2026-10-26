@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign in · plist</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <h1><span>plist</span> operations</h1>
+    {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+    <form method="post" action="{{ url_for('auth.login') }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="password">Shared password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>

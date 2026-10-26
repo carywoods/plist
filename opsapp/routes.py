@@ -29,6 +29,11 @@ def ops_error(exc):
     return redirect(request.referrer or url_for("ops.dashboard_page")), exc.status_code
 
 
+@bp.get("/health")
+def health():
+    return jsonify({"status": "ok", "service": "plist-ops"})
+
+
 @bp.get("/")
 def dashboard_page():
     return render_template("dashboard.html", board=service.dashboard())
