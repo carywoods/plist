@@ -14,6 +14,9 @@ There is no database to put elsewhere, so the container keeps a git checkout at
   not change the served code by itself — the entrypoint fast-forwards the
   checkout from `origin/main` on every start, which is what makes a push from
   Cary's desktop (or from Dax-A) live on the next restart.
+- `origin` is split on purpose: **fetch over HTTPS** (works on the public repo
+  with no credential) and **push over SSH** with the deploy key
+  (`OPS_GIT_REMOTE_URL` / `OPS_GIT_PUSH_URL` override both).
 - Never start a second container against the same volume: writes would interleave.
 - The volume also holds `/data/ssh/id_ed25519`, a deploy key the container
   generates for itself on first boot. Its public half is printed to the

@@ -9,7 +9,8 @@
 # its own credential: nothing secret is baked into the image or passed in argv.
 set -eu
 
-REPO_URL="${OPS_GIT_REMOTE_URL:-git@github.com:carywoods/plist.git}"
+REPO_URL="${OPS_GIT_REMOTE_URL:-https://github.com/carywoods/plist.git}"
+PUSH_URL="${OPS_GIT_PUSH_URL:-git@github.com:carywoods/plist.git}"
 BRANCH="${OPS_GIT_BRANCH:-main}"
 DATA_DIR="${OPS_DATA_VOLUME:-/data}"
 REPO_DIR="${PLIST_REPO_DIR:-$DATA_DIR/plist}"
@@ -44,7 +45,7 @@ if [ ! -d "$REPO_DIR/.git" ]; then
     if git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"; then
       break
     fi
-    echo "plist: clone failed (attempt $attempt/30) — is the deploy key on the repo yet? retrying in 10s"
+    echo "plist: clone failed (attempt $attempt/30) — check repo access for $REPO_URL, retrying in 10s"
     sleep 10
     if [ "$attempt" -ge 30 ]; then
       echo "plist: FATAL could not clone $REPO_URL"
@@ -69,5 +70,10 @@ else
 fi
 
 cd "$REPO_DIR"
+# Fetch over HTTPS (works on a public repo with no credential); push over SSH
+# with the deploy key this container generated. `git push` uses the pushurl.
+git remote set-url origin "$REPO_URL"
+git remote set-url --delete --push origin >/dev/null 2>&1 || true
+git remote set-url --add --push origin "$PUSH_URL"
 echo "plist: running $(git rev-parse --short HEAD) on $(git rev-parse --abbrev-ref HEAD) from $REPO_DIR"
 exec "$@"
