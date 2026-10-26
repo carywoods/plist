@@ -1,7 +1,7 @@
 {
-  "next_ic_number": 95,
-  "next_id": "IC-000095",
+  "next_ic_number": 96,
+  "next_id": "IC-000096",
   "notes": "Tracks next available IC number for Dax-A or Cary to assign to new projects.",
   "owner": "Dax-A",
-  "updated_at": "2026-10-26T22:54:23Z"
+  "updated_at": "2026-10-26T22:55:56Z"
 }
