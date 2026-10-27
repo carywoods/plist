@@ -4,16 +4,20 @@ The board runs as one container on the Coolify cluster. It is a **single-writer*
 service: the container owns the writable checkout, and every mutation is
 committed and pushed to `carywoods/plist` inside the same request.
 
-## Why the code lives on a volume
+## Two stores: code in the image, records on the volume
 
 A plist record *is* a file in this repository (`live/`, `active/`, `ops-data/`, ...).
-There is no database to put elsewhere, so the container keeps a git checkout at
-`/data/plist` on a persistent volume and runs from it. Consequences:
+There is no database to put elsewhere, so:
 
-- The image is runtime only (Python, gunicorn, git). Redeploying the image does
-  not change the served code by itself — the entrypoint fast-forwards the
-  checkout from `origin/main` on every start, which is what makes a push from
-  Cary's desktop (or from Dax-A) live on the next restart.
+- **Code is baked into the image** at `/app` (`wsgi.py`, `opsapp/`). One image is
+  one version of the code, and a code change ships by rebuilding it.
+- **Records live in a git checkout on the `/data` volume** at `/data/plist`.
+  `OPS_REPO_ROOT` points the app at that checkout, so record reads and writes
+  never touch the image.
+- Consequences: a **code** change needs a **Redeploy** (rebuild); a **record**
+  change needs a **Restart** (the entrypoint fast-forwards the checkout from
+  `origin/main` on every start, and every in-app mutation is committed and
+  pushed inside the same request).
 - `origin` is split on purpose: **fetch over HTTPS** (works on the public repo
   with no credential) and **push over SSH** with the deploy key
   (`OPS_GIT_REMOTE_URL` / `OPS_GIT_PUSH_URL` override both).
@@ -22,6 +26,7 @@ There is no database to put elsewhere, so the container keeps a git checkout at
   generates for itself on first boot. Its public half is printed to the
   container log; it needs **write access** on the GitHub repository for
   `OPS_GIT_REMOTE_PUSH=true` to work.
+- `docker-compose.yml` runs the same image locally (`docker compose up -d --build`).
 
 ## Environment
 
@@ -34,15 +39,24 @@ There is no database to put elsewhere, so the container keeps a git checkout at
 | `OPS_SESSION_DAYS` | `30` (login cookie lifetime) |
 | `OPS_PUBLIC_HOST` | optional extra hostname accepted by the same-origin check when behind a proxy |
 | `OPS_COOKIE_SECURE` | `true` only when served over HTTPS |
+| `OPS_REPO_ROOT` | record root. Set to `/data/plist` in the image; only override when running the code outside a container. |
+| `OPS_RUN_USER` | `plist` — the unprivileged user the entrypoint drops to before starting gunicorn |
 
 `OPS_GIT_USER_NAME` / `OPS_GIT_USER_EMAIL` default to `Dax-A <herm@indybiosystems.com>`
 and are what show up as the committer.
 
 ## Container shape
 
-- Build: `Dockerfile` (Coolify build pack = Dockerfile).
-- Exposed port: `8000`. Health check path: `/health` (public, no password).
-- Volume: `/data` (holds the checkout + deploy key).
+- Build: multi-stage `Dockerfile` (Coolify build pack = Dockerfile). Stage 1
+  installs dependencies into a venv from `pyproject.toml`; stage 2 adds git,
+  `gosu`, a `plist` user, and the code from the build context.
+- The entrypoint starts as root **only** to own the volume and prepare the git
+  checkout, then `exec gosu plist …` — gunicorn never runs as root.
+- Exposed port: `8000`. Health check path: `/health` (public, no password), wired
+  as a Docker `HEALTHCHECK`.
+- Volume: `/data` (holds the checkout + the deploy key). Record directories are
+  excluded from the build context by `.dockerignore` — the image never ships a
+  stale copy of the board.
 - gunicorn runs **one worker and one thread**. `next_ic.json` allocation has no
   cross-process lock, so raising concurrency can hand two projects the same IC
   number.

@@ -1,4 +1,10 @@
+# Build context for the plist image.
+#
+# The image carries the APPLICATION CODE only. Records and the git checkout come
+# from the /data volume, so every record directory is excluded here — baking
+# them in would ship a stale copy of the board inside the image.
 .git
+.github
 .venv
 __pycache__
 *.py[cod]
@@ -6,4 +12,22 @@ __pycache__
 .coverage
 instance
 .env
+.flaskenv
 data
+
+# records + operational state (live in the volume)
+active/
+live/
+planned/
+planning/
+concept/
+priority/
+ops-data/
+classification-*.json
+next_ic.json
+
+# not needed at runtime
+tests/
+docs/
+scripts/
+*.md

@@ -11,7 +11,12 @@ PLACEHOLDER_SECRET = "dev-only-change-me"
 
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
-    repo_root = Path(__file__).resolve().parent.parent
+    # Where the records live. In the container the code is baked at /app while
+    # the checkout (and every record) lives in the /data volume, so the record
+    # root is decoupled from the importable code location.
+    repo_root = Path(
+        os.environ.get("OPS_REPO_ROOT") or Path(__file__).resolve().parent.parent
+    ).resolve()
 
     try:
         session_days = int(os.environ.get("OPS_SESSION_DAYS", "30"))

@@ -1,12 +1,14 @@
 #!/bin/sh
 # plist container entrypoint.
 #
-# The volume at $DATA_DIR holds two things:
-#   $DATA_DIR/plist  — the git checkout (code + every record; the source of truth)
-#   $DATA_DIR/ssh    — the deploy key this container generated for itself
+# Two stores, on purpose:
+#   /app        — the application code, baked into the image (read-only)
+#   $DATA_DIR   — the git checkout (records + every write) and the deploy key
+#                 that this container generated for itself
 #
-# The deploy key is created on first boot and printed once, so the volume owns
-# its own credential: nothing secret is baked into the image or passed in argv.
+# The image carries the code, the volume carries the state. The entrypoint
+# prepares the checkout, then drops root and execs gunicorn as the unprivileged
+# 'plist' user with OPS_REPO_ROOT pointing at the checkout.
 set -eu
 
 REPO_URL="${OPS_GIT_REMOTE_URL:-https://github.com/carywoods/plist.git}"
@@ -16,6 +18,7 @@ DATA_DIR="${OPS_DATA_VOLUME:-/data}"
 REPO_DIR="${PLIST_REPO_DIR:-$DATA_DIR/plist}"
 SSH_DIR="$DATA_DIR/ssh"
 KEY="$SSH_DIR/id_ed25519"
+RUN_USER="${OPS_RUN_USER:-plist}"
 
 mkdir -p "$DATA_DIR" "$SSH_DIR"
 chmod 700 "$SSH_DIR"
@@ -32,9 +35,11 @@ fi
 
 export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SSH_DIR/known_hosts"
 
-git config --global user.name "${OPS_GIT_USER_NAME:-Dax-A}"
-git config --global user.email "${OPS_GIT_USER_EMAIL:-herm@indybiosystems.com}"
-git config --global --add safe.directory "$REPO_DIR"
+# --system so the identity and safe.directory apply to the unprivileged user
+# gunicorn runs as, not only to root.
+git config --system user.name "${OPS_GIT_USER_NAME:-Dax-A}"
+git config --system user.email "${OPS_GIT_USER_EMAIL:-herm@indybiosystems.com}"
+git config --system --add safe.directory "$REPO_DIR"
 
 # Read path: an explicit OPS_GIT_REMOTE_URL wins; otherwise use SSH once the
 # deploy key is authorized (that keeps working if the repo goes private) and
@@ -83,11 +88,21 @@ else
   fi
 fi
 
-cd "$REPO_DIR"
 # Fetch over HTTPS (works on a public repo with no credential); push over SSH
 # with the deploy key this container generated. `git push` uses the pushurl.
-git remote set-url origin "$REPO_URL"
-git remote set-url --delete --push origin >/dev/null 2>&1 || true
-git remote set-url --add --push origin "$PUSH_URL"
-echo "plist: running $(git rev-parse --short HEAD) on $(git rev-parse --abbrev-ref HEAD) from $REPO_DIR"
+git -C "$REPO_DIR" remote set-url origin "$REPO_URL"
+git -C "$REPO_DIR" remote set-url --delete --push origin >/dev/null 2>&1 || true
+git -C "$REPO_DIR" remote set-url --add --push origin "$PUSH_URL"
+
+# Records must be writable by the unprivileged runtime user.
+if [ "$(id -u)" = "0" ]; then
+  chown -R "$RUN_USER":"$RUN_USER" "$DATA_DIR"
+fi
+
+export OPS_REPO_ROOT="$REPO_DIR"
+echo "plist: code from /app, records from $REPO_DIR at $(git -C "$REPO_DIR" rev-parse --short HEAD) on $(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)"
+
+if [ "$(id -u)" = "0" ] && command -v gosu >/dev/null 2>&1; then
+  exec gosu "$RUN_USER" "$@"
+fi
 exec "$@"

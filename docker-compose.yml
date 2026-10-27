@@ -1,0 +1,39 @@
+# Local container run of plist — same image Coolify builds.
+#
+#   cp .env.example .env   # then fill in OPS_PASSWORD / OPS_SECRET_KEY
+#   docker compose up -d --build
+#   curl -s localhost:8000/health
+#
+# The /data volume is the board: every record is a file in a git checkout, so it
+# must persist across rebuilds. Same rule as production — one container only
+# (one gunicorn worker; next_ic.json has no cross-process lock).
+services:
+  plist:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: plist-ops:local
+    container_name: plist
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      OPS_PASSWORD: ${OPS_PASSWORD:?set OPS_PASSWORD in .env}
+      OPS_SECRET_KEY: ${OPS_SECRET_KEY:?set OPS_SECRET_KEY in .env}
+      OPS_GIT_ENABLED: ${OPS_GIT_ENABLED:-true}
+      OPS_GIT_REMOTE_PUSH: ${OPS_GIT_REMOTE_PUSH:-true}
+      OPS_SESSION_DAYS: ${OPS_SESSION_DAYS:-30}
+      OPS_COOKIE_SECURE: ${OPS_COOKIE_SECURE:-false}
+      OPS_GIT_REMOTE_URL: ${OPS_GIT_REMOTE_URL:-}
+      OPS_GIT_PUSH_URL: ${OPS_GIT_PUSH_URL:-}
+    volumes:
+      - plist-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
+
+volumes:
+  plist-data:
