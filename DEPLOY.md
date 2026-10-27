@@ -67,3 +67,55 @@ curl -s -H "X-Ops-Key: $OPS_PASSWORD" http://<node>:<port>/api/projects | head -
 A write is verified end to end only when the GitHub `main` HEAD has moved:
 `git ls-remote git@github.com:carywoods/plist.git refs/heads/main` should equal
 the commit the API response reports in `sync.git_commit`.
+
+## How the deployed copy stays in synch
+
+GitHub `main` is the source of truth. Sync runs in one direction continuously
+and the other only at boot:
+
+| Direction | When | Mechanism |
+| --- | --- | --- |
+| app → GitHub | every mutation | `git_commit()` + push with the container's deploy key, inside the request |
+| GitHub → app | container **start only** | entrypoint fetch + `merge --ff-only`, only when the checkout is clean and has nothing unpushed |
+
+There is no polling loop, no cron, and no background sync worker in the app —
+nothing pulls between restarts. The container serves whatever tree it booted
+with.
+
+### The NAS checkout is a read-only mirror
+
+The app is the **only writer**. `/mnt/dax/code/plist` exists to be read:
+
+- Never edit, commit, or push from it. Refresh it with
+  `scripts/nas_mirror.sh` (fetch + `merge --ff-only`; refuses on a dirty tree).
+- That copy carries a local write guard: `pre-commit` and `pre-push` hooks,
+  installed via `core.hooksPath` rather than `.git/hooks`, because the CIFS
+  mount is `file_mode=0664` and cannot store an executable bit — hooks inside
+  `.git/hooks` are silently ignored there. The guard refuses unless
+  `PLIST_WRITE_OK=1` is set for that single command.
+- A peer write is invisible to the running app and is how the deployed copy
+  goes stale. Worse, if the container also holds local commits the boot-time
+  merge refuses and it silently serves local state.
+
+### Getting an out-of-band commit live
+
+Only for the approved exception (a fix pushed straight to `main`, e.g. while the
+app is down):
+
+1. Push to `main`.
+2. Restart the app (Coolify → application → Restart). No rebuild is needed — the
+   entrypoint fast-forwards the volume on start.
+3. Verify before reporting it done:
+   ```bash
+   ssh root@<node> 'docker exec <container> git -C /data/plist rev-parse --short HEAD'
+   git ls-remote git@github.com:carywoods/plist.git refs/heads/main
+   ```
+   The two hashes must match, and the record must be visible via
+   `/api/projects`.
+
+### If the container refuses to fast-forward
+
+The entrypoint logs `WARNING local changes (dirty=N) or unpushed commits (N) —
+NOT pulling, serving local state`. That means something else wrote to the
+volume. Reconcile the volume's commit back into `main`, then restart. Never
+`git reset` the volume while the app is serving.

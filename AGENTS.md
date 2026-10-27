@@ -51,6 +51,14 @@ Cary, Dax-A, and other operational agents access this NAS share across different
 - **Identity & Authorization:** Do not assume identical Linux UID/GID values across machines. Do not use `chmod` or filesystem permissions as an application security boundary.
 - **Fail Fast & Loudly:** Never swallow filesystem write errors. If a write or Git operation fails, surface the error immediately.
 
+### Write Path: the Deployed App Is the Only Writer
+
+The live application (Coolify) owns the writable checkout on its volume and commits + pushes every mutation. That makes it the system's **single writer**.
+
+- **The NAS checkout is a read-only mirror.** Do not edit, commit, or push from `/mnt/dax/code/plist`. Inspect it freely; refresh it with `scripts/nas_mirror.sh` (fetch + `merge --ff-only`, refuses on a dirty tree). This copy carries a local write guard (see `DEPLOY.md`) that refuses `commit` and `push` unless `PLIST_WRITE_OK=1` is set for that one command.
+- **Why:** a second writer cannot be seen by the deployed copy. The container fast-forwards from `origin/main` only at start, so a peer write leaves the live app serving stale state, and if the container holds local commits of its own the boot-time merge refuses and it silently keeps serving local state.
+- **Out-of-band commits are an approved exception, not a workflow.** If one is genuinely needed (e.g. a record fix while the app is down), push to `main`, restart the app, and verify the container's `HEAD` equals `main` before reporting it done.
+
 ---
 
 ## Current Actors & Authority Boundaries
