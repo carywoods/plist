@@ -87,7 +87,9 @@ with.
 The app is the **only writer**. `/mnt/dax/code/plist` exists to be read:
 
 - Never edit, commit, or push from it. Refresh it with
-  `scripts/nas_mirror.sh` (fetch + `merge --ff-only`; refuses on a dirty tree).
+  `sh scripts/nas_mirror.sh` (fetch + `merge --ff-only`; refuses on a dirty
+  tree). The mount is `file_mode=0664`, so the script has no executable bit —
+  run it through `sh`, not `./scripts/nas_mirror.sh`.
 - That copy carries a local write guard: `pre-commit` and `pre-push` hooks,
   installed via `core.hooksPath` rather than `.git/hooks`, because the CIFS
   mount is `file_mode=0664` and cannot store an executable bit — hooks inside
